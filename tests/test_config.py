@@ -19,9 +19,9 @@ class TestNodeColors:
             NodeColors.VIRTUAL_NETWORK,
             NodeColors.ROUTE,
             NodeColors.IDENTITY_PROVIDER,
-            NodeColors.GATEWAY_RULE,
-            NodeColors.CONNECTION,
-            NodeColors.CLOUDFLARE,
+            NodeColors.ALLOW,
+            NodeColors.DENY,
+            NodeColors.BYPASS,
         ]
         
         for color in colors:
@@ -51,9 +51,6 @@ class TestNodeShapes:
             NodeShapes.VIRTUAL_NETWORK,
             NodeShapes.ROUTE,
             NodeShapes.IDENTITY_PROVIDER,
-            NodeShapes.GATEWAY_RULE,
-            NodeShapes.CONNECTION,
-            NodeShapes.CLOUDFLARE,
         ]
         
         for shape in shapes:
@@ -72,7 +69,7 @@ class TestConfig:
         
         assert config.api_token == "test-token"
         assert config.account_id == "test-account"
-        assert config.base_url == "https://api.cloudflare.com/client/v4"
+        assert config.api_base_url == "https://api.cloudflare.com/client/v4"
 
     def test_from_env_missing_token(self, monkeypatch):
         """Test that missing API token raises error."""
@@ -96,50 +93,50 @@ class TestAPIEndpoints:
 
     def test_tunnels_endpoint(self):
         """Test tunnels endpoint generation."""
-        endpoint = APIEndpoints.tunnels("acc-123")
+        endpoint = APIEndpoints.LIST_TUNNELS.format(account_id="acc-123")
         assert endpoint == "/accounts/acc-123/cfd_tunnel"
 
     def test_tunnel_detail_endpoint(self):
         """Test tunnel detail endpoint generation."""
-        endpoint = APIEndpoints.tunnel_detail("acc-123", "tun-456")
+        endpoint = APIEndpoints.GET_TUNNEL.format(account_id="acc-123", tunnel_id="tun-456")
         assert endpoint == "/accounts/acc-123/cfd_tunnel/tun-456"
 
     def test_applications_endpoint(self):
         """Test applications endpoint generation."""
-        endpoint = APIEndpoints.applications("acc-123")
+        endpoint = APIEndpoints.LIST_APPLICATIONS.format(account_id="acc-123")
         assert endpoint == "/accounts/acc-123/access/apps"
 
     def test_policies_endpoint(self):
         """Test policies endpoint generation."""
-        endpoint = APIEndpoints.policies("acc-123", "app-789")
+        endpoint = APIEndpoints.LIST_APP_POLICIES.format(account_id="acc-123", app_id="app-789")
         assert endpoint == "/accounts/acc-123/access/apps/app-789/policies"
 
     def test_groups_endpoint(self):
         """Test groups endpoint generation."""
-        endpoint = APIEndpoints.groups("acc-123")
+        endpoint = APIEndpoints.LIST_GROUPS.format(account_id="acc-123")
         assert endpoint == "/accounts/acc-123/access/groups"
 
     def test_identity_providers_endpoint(self):
         """Test identity providers endpoint generation."""
-        endpoint = APIEndpoints.identity_providers("acc-123")
+        endpoint = APIEndpoints.LIST_IDENTITY_PROVIDERS.format(account_id="acc-123")
         assert endpoint == "/accounts/acc-123/access/identity_providers"
 
     def test_devices_endpoint(self):
         """Test devices endpoint generation."""
-        endpoint = APIEndpoints.devices("acc-123")
-        assert endpoint == "/accounts/acc-123/devices"
+        endpoint = APIEndpoints.LIST_DEVICES.format(account_id="acc-123")
+        assert endpoint == "/accounts/acc-123/devices/physical-devices"
 
     def test_virtual_networks_endpoint(self):
         """Test virtual networks endpoint generation."""
-        endpoint = APIEndpoints.virtual_networks("acc-123")
+        endpoint = APIEndpoints.LIST_VIRTUAL_NETWORKS.format(account_id="acc-123")
         assert endpoint == "/accounts/acc-123/teamnet/virtual_networks"
 
     def test_routes_endpoint(self):
         """Test routes endpoint generation."""
-        endpoint = APIEndpoints.routes("acc-123")
+        endpoint = APIEndpoints.LIST_ROUTES.format(account_id="acc-123")
         assert endpoint == "/accounts/acc-123/teamnet/routes"
 
     def test_gateway_rules_endpoint(self):
         """Test gateway rules endpoint generation."""
-        endpoint = APIEndpoints.gateway_rules("acc-123")
+        endpoint = APIEndpoints.LIST_GATEWAY_RULES.format(account_id="acc-123")
         assert endpoint == "/accounts/acc-123/gateway/rules"
