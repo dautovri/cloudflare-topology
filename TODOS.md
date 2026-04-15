@@ -6,7 +6,7 @@
 - [ ] Add caching/TTL for topology data (15 min TTL, regenerate in background)
 - [ ] Atomic file writes for OUTPUT_FILE (write to temp, rename on success)
 - [ ] Add CI/CD pipeline (.github/workflows/test.yml with pytest + mypy)
-- [ ] Server version disclosure: Werkzeug still leaks version in dev mode (ISSUE-006, deferred/low)
+- [x] Server version disclosure: Server header fully stripped via custom WSGIRequestHandler — Fixed by /qa on main, 2026-04-15 (ISSUE-008, was ISSUE-006)
 
 ## Features
 - [ ] JSON export mode (enable Terraform/Ansible/compliance integrations)
@@ -23,4 +23,4 @@
 - [ ] Structured logging with request IDs
 
 ## Code Quality
-- [ ] Remove dead isinstance branch in main.py:155
+- [x] Remove dead isinstance branch in main.py node_counts — Fixed by /qa on main, 2026-04-15 (ISSUE-007)
