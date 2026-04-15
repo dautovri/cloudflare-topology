@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from flask import Flask, send_from_directory, jsonify, request
+from werkzeug.serving import WSGIRequestHandler
 
 # Setup logging
 logging.basicConfig(
@@ -31,8 +32,15 @@ def add_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers.pop("Server", None)
     return response
+
+
+class _QuietHandler(WSGIRequestHandler):
+    """Suppress the Server header that Werkzeug adds by default."""
+
+    def send_header(self, keyword, value):
+        if keyword.lower() != "server":
+            super().send_header(keyword, value)
 
 # Path to the generated HTML file
 APP_DIR = Path(__file__).parent.parent
@@ -123,4 +131,4 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
     
     logger.info(f"Starting server on {host}:{port}")
-    app.run(host=host, port=port, debug=False)
+    app.run(host=host, port=port, debug=False, request_handler=_QuietHandler)

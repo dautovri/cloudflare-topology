@@ -160,7 +160,7 @@ def main() -> int:
         node_counts = {
             'tunnel': len(topology.tunnels),
             'application': len(topology.applications),
-            'policy': len(topology.policies) if isinstance(topology.policies, list) else sum(len(p) for p in topology.policies.values()),
+            'policy': len(topology.policies),
             'group': len(topology.groups),
             'identity_provider': len(topology.identity_providers),
             'virtual_network': len(topology.virtual_networks),
