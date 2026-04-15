@@ -116,3 +116,4 @@ output/
 !templates/*.html
 topology_*.html
 cloudflare_topology.html
+.gstack/
