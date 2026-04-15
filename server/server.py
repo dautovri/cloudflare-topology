@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from flask import Flask, send_from_directory, jsonify, request
+from flask import Flask, send_from_directory, jsonify, request, render_template_string
 from werkzeug.serving import WSGIRequestHandler
 
 # Setup logging
@@ -46,6 +46,31 @@ class _QuietHandler(WSGIRequestHandler):
 APP_DIR = Path(__file__).parent.parent
 OUTPUT_FILE = "network_topology.html"
 
+ERROR_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} — Cloudflare Topology</title>
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+         background:#1a1a2e; color:#fff; }
+  .card { text-align:center; max-width:420px; padding:40px 24px; }
+  .code { font-size:72px; font-weight:700; color:#f6821f; margin:0 0 8px; }
+  h1 { font-size:20px; font-weight:600; margin:0 0 12px; }
+  p  { font-size:14px; color:#888; line-height:1.5; margin:0; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="code">{{ code }}</div>
+    <h1>{{ title }}</h1>
+    <p>{{ message }}</p>
+  </div>
+</body>
+</html>"""
+
 
 def generate_topology() -> bool:
     """Generate the topology visualization."""
@@ -81,12 +106,25 @@ def serve_topology():
     output_path = APP_DIR / OUTPUT_FILE
     
     if not output_path.exists():
-        return jsonify({
-            "error": "Topology not generated yet",
-            "message": "Please wait or check the logs for errors"
-        }), 503
+        return render_template_string(
+            ERROR_PAGE,
+            code=503,
+            title="Topology Not Ready",
+            message="The network topology hasn't been generated yet. Check the logs or trigger a regeneration.",
+        ), 503
     
     return send_from_directory(str(APP_DIR), OUTPUT_FILE)
+
+
+@app.errorhandler(404)
+def not_found(e):
+    """Custom 404 page matching the Cloudflare dark theme."""
+    return render_template_string(
+        ERROR_PAGE,
+        code=404,
+        title="Page Not Found",
+        message="The page you're looking for doesn't exist. Try the topology view at /.",
+    ), 404
 
 
 @app.route("/health")
