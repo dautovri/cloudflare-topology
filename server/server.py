@@ -2,13 +2,14 @@
 Flask server for serving the topology visualization in Docker.
 """
 
+import hmac
 import os
 import logging
 import subprocess
 import sys
 from pathlib import Path
 
-from flask import Flask, send_from_directory, jsonify
+from flask import Flask, send_from_directory, jsonify, request
 
 # Setup logging
 logging.basicConfig(
@@ -18,6 +19,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+# Shared secret for /regenerate endpoint (set via REGEN_AUTH_TOKEN env var)
+REGEN_AUTH_TOKEN = os.environ.get("REGEN_AUTH_TOKEN", "")
+
+
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses."""
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers.pop("Server", None)
+    return response
 
 # Path to the generated HTML file
 APP_DIR = Path(__file__).parent.parent
@@ -79,7 +94,18 @@ def health_check():
 
 @app.route("/regenerate", methods=["POST"])
 def regenerate():
-    """Regenerate the topology visualization."""
+    """Regenerate the topology visualization. Requires Bearer token auth."""
+    if not REGEN_AUTH_TOKEN:
+        return jsonify({"status": "error", "message": "Regeneration endpoint not configured"}), 403
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"status": "error", "message": "Missing or invalid Authorization header"}), 401
+
+    provided_token = auth_header[len("Bearer "):]
+    if not hmac.compare_digest(provided_token, REGEN_AUTH_TOKEN):
+        return jsonify({"status": "error", "message": "Invalid token"}), 403
+
     success = generate_topology()
     
     if success:
