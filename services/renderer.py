@@ -45,7 +45,7 @@ class TopologyRenderer:
         
         # Create Pyvis network
         net = Network(
-            height="100vh",
+            height="100dvh",
             width="100%",
             bgcolor="#1a1a2e",
             font_color="#ffffff",
@@ -601,7 +601,7 @@ class TopologyRenderer:
     def _get_search_html(self, node_counts: dict) -> str:
         """Get search box HTML with dynamic filter buttons."""
         # Only show filter buttons for types that have data
-        filter_buttons = ['<button class="filter-btn active" data-type="all" onclick="toggleFilter(\'all\')">All</button>']
+        filter_buttons = ['<button class="filter-btn active" data-type="all" role="button" aria-pressed="true" onclick="toggleFilter(\'all\')">All</button>']
         
         type_labels = {
             'tunnel': 'Tunnels',
@@ -618,7 +618,7 @@ class TopologyRenderer:
             count = node_counts.get(node_type, 0)
             if count > 0:
                 filter_buttons.append(
-                    f'<button class="filter-btn" data-type="{node_type}" onclick="toggleFilter(\'{node_type}\')">{label} ({count})</button>'
+                    f'<button class="filter-btn" data-type="{node_type}" role="button" aria-pressed="false" onclick="toggleFilter(\'{node_type}\')">{label} ({count})</button>'
                 )
         
         buttons_html = '\n                '.join(filter_buttons)
@@ -626,13 +626,14 @@ class TopologyRenderer:
         return f"""
         <div class="search-container" id="searchContainer">
             <h3>
-                <span>🔍 Search & Filter</span>
-                <button class="clear-btn" onclick="clearSearch()" title="Clear">×</button>
+                <span aria-hidden="true">🔍</span> Search & Filter
+                <button class="clear-btn" onclick="clearSearch()" aria-label="Clear search">×</button>
             </h3>
             <input 
                 type="text" 
                 class="search-input" 
                 id="searchInput" 
+                aria-label="Search nodes by name, domain, or type"
                 placeholder="Search by name, domain, type..."
                 onkeyup="performSearch(this.value)"
             >
@@ -662,7 +663,7 @@ class TopologyRenderer:
             if count > 0:
                 items_html += f"""
                 <div class="legend-item">
-                    <div class="legend-color" style="background: {color};"></div>
+                    <div class="legend-color" style="background: {color};" role="img" aria-label="{label} color swatch"></div>
                     <span>{label}</span>
                     <span style="color: #555; margin-left: auto;">{count}</span>
                 </div>
@@ -675,7 +676,7 @@ class TopologyRenderer:
         <div class="legend-container" id="legendContainer">
             <h4>
                 <span>Legend</span>
-                <button class="legend-toggle" onclick="toggleLegend()">Hide</button>
+                <button class="legend-toggle" onclick="toggleLegend()" aria-label="Toggle legend visibility">Hide</button>
             </h4>
             <div class="legend-items" id="legendItems">
                 {items_html}
@@ -787,7 +788,9 @@ class TopologyRenderer:
             
             // Update button states
             document.querySelectorAll('.filter-btn').forEach(btn => {{
-                btn.classList.toggle('active', btn.dataset.type === type);
+                const isActive = btn.dataset.type === type;
+                btn.classList.toggle('active', isActive);
+                btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
             }});
             
             // Re-run search
