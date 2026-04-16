@@ -9,8 +9,8 @@ Usage:
     python main.py [--debug] [--output FILE]
 
 Environment Variables:
-    CLOUDFLARE_API_TOKEN: Your Cloudflare API token
-    CLOUDFLARE_ACCOUNT_ID: Your Cloudflare account ID
+    CLOUDFLARE_API_TOKEN: Your Cloudflare API token (required)
+    CLOUDFLARE_ACCOUNT_ID: Your Cloudflare account ID (auto-discovered if omitted)
 """
 
 import argparse
@@ -60,7 +60,7 @@ Examples:
 
 Environment Variables:
     CLOUDFLARE_API_TOKEN    Cloudflare API token (required)
-    CLOUDFLARE_ACCOUNT_ID   Cloudflare account ID (required)
+    CLOUDFLARE_ACCOUNT_ID   Cloudflare account ID (auto-discovered if omitted)
     DEBUG                   Enable debug mode (optional)
         """
     )
@@ -122,10 +122,10 @@ def main() -> int:
         config.debug = args.debug
         config.output_file = args.output
         
-        logger.info(f"Account ID: {config.account_id}")
-        
-        # Initialize API client
+        # Initialize API client (auto-discovers account ID if needed)
         api_client = CloudflareAPIClient(config)
+        
+        logger.info(f"Account ID: {config.account_id}")
         
         # Fetch topology data
         logger.info("📡 Fetching topology data from Cloudflare API...")
@@ -191,10 +191,6 @@ def main() -> int:
         
     except ValueError as e:
         logger.error(f"❌ Configuration error: {e}")
-        logger.error("")
-        logger.error("Make sure to set environment variables:")
-        logger.error("  export CLOUDFLARE_API_TOKEN='your-token'")
-        logger.error("  export CLOUDFLARE_ACCOUNT_ID='your-account-id'")
         return 1
         
     except CloudflareAPIError as e:

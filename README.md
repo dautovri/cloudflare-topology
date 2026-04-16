@@ -48,7 +48,7 @@ Generate interactive network topology visualizations for your Cloudflare Zero Tr
 ### Prerequisites
 
 - **Python 3.12+**
-- **Cloudflare API Token** with Zero Trust read permissions
+- **Cloudflare account** (any auth method below)
 
 ### 1. Clone & Install
 
@@ -58,20 +58,30 @@ cd cloudflare-topology
 pip install -r requirements.txt
 ```
 
-### 2. Configure Credentials
+### 2. Authenticate
+
+**Option A — Zero config (recommended):** If you have [wrangler](https://developers.cloudflare.com/workers/wrangler/) installed and logged in, it just works:
+
+```bash
+wrangler login          # one-time: opens browser, click Allow
+python main.py          # done — uses wrangler's OAuth token automatically
+```
+
+**Option B — API token:** Set the environment variable:
 
 ```bash
 export CLOUDFLARE_API_TOKEN="your-api-token"
-export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+python main.py
 ```
 
-<details>
-<summary>📍 Where to find your Account ID</summary>
+> **Account ID** is auto-discovered from your token. Set `CLOUDFLARE_ACCOUNT_ID` only if your token has access to multiple accounts and you want a specific one.
 
-Your Account ID is visible in:
-- The URL when logged into Cloudflare: `dash.cloudflare.com/<ACCOUNT_ID>/...`
-- Any zone's Overview page → right sidebar under "Account ID"
-- Workers & Pages → right sidebar
+<details>
+<summary>📍 Where to create an API token</summary>
+
+1. Go to [Cloudflare Dashboard → API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Click "Create Token" → "Create Custom Token"
+3. Add permissions: **Zero Trust: Read**, **Access: Apps and Policies: Read**
 
 </details>
 
@@ -101,9 +111,8 @@ Run as a web service with automatic regeneration:
 # Build
 make build
 
-# Run (requires env vars)
+# Run (requires API token — wrangler login not available in Docker)
 export CLOUDFLARE_API_TOKEN="your-token"
-export CLOUDFLARE_ACCOUNT_ID="your-account-id"
 make run
 
 # View at http://localhost:8080
@@ -118,7 +127,6 @@ docker run -d \
   --name cloudflare-topology \
   -p 8080:8080 \
   -e CLOUDFLARE_API_TOKEN="your-token" \
-  -e CLOUDFLARE_ACCOUNT_ID="your-account-id" \
   cloudflare-topology
 ```
 
