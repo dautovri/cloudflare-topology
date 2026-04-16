@@ -157,6 +157,15 @@ class TopologyRenderer:
         html_content = html_content.replace('<center>\n<h1></h1>\n</center>', '')
         html_content = html_content.replace('<center>\n          <h1></h1>\n        </center>', '')
         
+        # Remove Bootstrap (unused — custom CSS handles all styling)
+        import re
+        html_content = re.sub(
+            r'<link[^>]*cdn\.jsdelivr\.net/npm/bootstrap[^>]*/>\s*', '', html_content
+        )
+        html_content = re.sub(
+            r'<script[^>]*cdn\.jsdelivr\.net/npm/bootstrap[^>]*></script>\s*', '', html_content
+        )
+        
         # Prepare node metadata for search
         node_data = []
         for node in graph.get_node_list():
