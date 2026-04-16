@@ -4,6 +4,8 @@ HTML renderer for Cloudflare topology visualization using Pyvis.
 
 import logging
 import json
+import os
+import tempfile
 from typing import Optional
 from pathlib import Path
 
@@ -82,12 +84,32 @@ class TopologyRenderer:
                 arrows="to",
             )
         
-        # Generate HTML
-        net.write_html(output_path, notebook=False, open_browser=False)
-        
-        # Inject custom CSS and JavaScript
-        self._inject_customizations(output_path, graph, node_counts)
-        
+        # Generate HTML atomically: write to a temp file in the same directory,
+        # inject customisations, then os.replace to the final path. Prevents
+        # partial/empty files if the process is killed mid-write.
+        final_path = Path(output_path)
+        target_dir = final_path.parent if str(final_path.parent) else Path(".")
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            prefix=f".{final_path.name}.",
+            suffix=".tmp",
+            dir=str(target_dir),
+        )
+        os.close(tmp_fd)  # pyvis opens by path
+
+        try:
+            net.write_html(tmp_path, notebook=False, open_browser=False)
+            self._inject_customizations(tmp_path, graph, node_counts)
+            os.replace(tmp_path, output_path)
+        except Exception:
+            # Best-effort cleanup of temp file on failure
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
         logger.info(f"Rendered topology with {len(graph.nodes)} nodes and {len(graph.edges)} edges")
         return output_path
     
