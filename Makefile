@@ -76,9 +76,13 @@ lint:
 logs:
 	docker logs -f $(CONTAINER_NAME)
 
-# Regenerate topology in running container
+# Regenerate topology in running container (requires REGEN_AUTH_TOKEN env var)
 regenerate:
-	curl -X POST http://localhost:$(PORT)/regenerate
+	@if [ -z "$$REGEN_AUTH_TOKEN" ]; then \
+		echo "Error: set REGEN_AUTH_TOKEN to the same value used when starting the container"; \
+		exit 1; \
+	fi
+	curl -X POST -H "Authorization: Bearer $$REGEN_AUTH_TOKEN" http://localhost:$(PORT)/regenerate
 
 # Help
 help:

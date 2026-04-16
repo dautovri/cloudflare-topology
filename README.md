@@ -135,8 +135,94 @@ docker run -d \
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | View topology visualization |
-| `/health` | GET | Health check |
-| `/regenerate` | POST | Trigger topology refresh |
+| `/health` | GET | Health + freshness status (JSON) |
+| `/regenerate` | POST | Queue a topology refresh (requires Bearer auth) |
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLOUDFLARE_API_TOKEN` | *(required)* | API token with Zero Trust read permissions |
+| `CLOUDFLARE_ACCOUNT_ID` | auto-discover | Account ID (required only for multi-account tokens) |
+| `PORT` | `8080` | Port the Flask server binds to |
+| `HOST` | `0.0.0.0` | Interface the Flask server binds to |
+| `REGEN_INTERVAL_SECONDS` | `900` | Scheduled regeneration interval in seconds. `0` disables the scheduler. Valid range: `0` or `>= 60`. Recommended `>= 300`. |
+| `REGEN_AUTH_TOKEN` | *(unset)* | Bearer token required for `POST /regenerate`. When unset, `/regenerate` returns `403`. |
+
+### Scheduled Regeneration
+
+A background scheduler calls `python main.py` every `REGEN_INTERVAL_SECONDS` seconds (default: 15 minutes) and atomically replaces `network_topology.html`. Default behaviour: the container stays fresh with zero operator action.
+
+- **Disable:** set `REGEN_INTERVAL_SECONDS=0`.
+- **Customise:** `docker run -e REGEN_INTERVAL_SECONDS=1800 ...` for 30 minutes.
+- **Startup:** if `network_topology.html` does not exist yet, the server generates it synchronously on boot before accepting requests.
+
+### ⚠️ Single-Process Deployment Only
+
+The scheduler uses in-process state (`threading.Timer` + a lock). **Do not run with multiple workers** (`gunicorn -w 2+`, uwsgi with processes, etc.) — each worker would run its own scheduler and race for the output file.
+
+The server detects common multi-worker env vars (`WEB_CONCURRENCY`, `GUNICORN_WORKERS`, `UWSGI_WORKERS`, `GUNICORN_CMD_ARGS` with `-w N`) and refuses to start the scheduler, logging an ERROR. The HTTP endpoints still work; the topology just won't auto-refresh.
+
+For multi-replica deployments, coordinate regeneration externally (cron, K8s CronJob, CI).
+
+### `/regenerate` Contract
+
+```
+POST /regenerate
+Authorization: Bearer <REGEN_AUTH_TOKEN>
+```
+
+| Status | Meaning | Body |
+|--------|---------|------|
+| `202 Accepted` | Regeneration queued on background thread | `{"status":"accepted","message":"Topology regeneration queued"}` |
+| `409 Conflict` | Another regeneration is already running. Sets `Retry-After: 10`. | `{"status":"already_running","hint":"GET /health returns regen_in_progress and next_scheduled_regen_at"}` |
+| `401` / `403` | Missing or invalid auth | `{"status":"error","message":"..."}` |
+
+Fire-and-forget: the response returns as soon as the job is queued, not when the topology is ready. Poll `/health` to detect completion.
+
+### `/health` Schema
+
+```json
+{
+  "status": "healthy",
+  "topology_exists": true,
+  "last_generated_at": "2026-04-16T14:15:00Z",
+  "regen_in_progress": false,
+  "next_scheduled_regen_at": "2026-04-16T14:30:00Z"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | Always `"healthy"` when the server is up |
+| `topology_exists` | bool | `true` if `network_topology.html` is present on disk |
+| `last_generated_at` | ISO 8601 UTC or `null` | Timestamp of the last successful regeneration (falls back to file mtime at startup) |
+| `regen_in_progress` | bool | `true` while a regeneration is running |
+| `next_scheduled_regen_at` | ISO 8601 UTC or `null` | When the scheduler will fire next. `null` if the scheduler is disabled. |
+
+### Monitoring & Debugging
+
+Check freshness from outside the container:
+
+```bash
+curl -s http://localhost:8080/health | jq '.last_generated_at, .next_scheduled_regen_at'
+```
+
+If `last_generated_at` is older than `2 * REGEN_INTERVAL_SECONDS`, something is wrong — check container logs:
+
+```bash
+docker logs <container> 2>&1 | grep -iE 'scheduler|regenerat'
+```
+
+Scheduler thread is named `topology-scheduler` for legible stack dumps.
+
+### Upgrade Guide: v0.1 → v0.2
+
+- `POST /regenerate` now returns **`202 Accepted`** (queued, fire-and-forget) instead of `200 OK` after synchronous completion. Clients that only check `2xx` keep working. Clients that hard-check `status == 200` must accept `202`.
+- Response body key changed from `{"status":"success", ...}` to `{"status":"accepted", ...}` on success.
+- New `409 Conflict` response when a regeneration is already running; clients should respect `Retry-After: 10`.
+- `/health` gains three new fields (`last_generated_at`, `regen_in_progress`, `next_scheduled_regen_at`). Existing `status` and `topology_exists` fields are unchanged.
+- Output file writes are now atomic (`tempfile` + `os.replace`). No action required; readers will never observe a truncated file.
 
 ---
 

@@ -118,3 +118,4 @@ topology_*.html
 cloudflare_topology.html
 .gstack/
 _deploy/
+.wrangler/

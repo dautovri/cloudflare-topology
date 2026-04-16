@@ -19,7 +19,7 @@ import sys
 import webbrowser
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from config import Config
 from services.cloudflare_api import CloudflareAPIClient, CloudflareAPIError
