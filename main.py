@@ -19,6 +19,8 @@ import sys
 import webbrowser
 from pathlib import Path
 
+__version__ = "0.1.0"
+
 from config import Config
 from services.cloudflare_api import CloudflareAPIClient, CloudflareAPIError
 from services.network_graph import NetworkGraphBuilder
@@ -59,10 +61,16 @@ Examples:
     python main.py --no-devices
 
 Environment Variables:
-    CLOUDFLARE_API_TOKEN    Cloudflare API token (required)
+    CLOUDFLARE_API_TOKEN    Cloudflare API token (or use wrangler login)
     CLOUDFLARE_ACCOUNT_ID   Cloudflare account ID (auto-discovered if omitted)
     DEBUG                   Enable debug mode (optional)
         """
+    )
+    
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     
     parser.add_argument(
