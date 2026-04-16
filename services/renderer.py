@@ -408,38 +408,6 @@ class TopologyRenderer:
             display: none;
         }
         
-        /* Stats */
-        .stats-container {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 12px 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            font-size: 12px;
-        }
-        
-        .stats-item {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 4px;
-        }
-        
-        .stats-item:last-child {
-            margin-bottom: 0;
-        }
-        
-        .stats-label {
-            color: #888;
-        }
-        
-        .stats-value {
-            font-weight: 600;
-        }
-        
         /* Scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
@@ -707,7 +675,6 @@ class TopologyRenderer:
         document.addEventListener('DOMContentLoaded', function() {{
             initializeSearch();
             initializeDragFunctionality();
-            updateStats();
         }});
         
         function initializeSearch() {{
@@ -929,41 +896,6 @@ class TopologyRenderer:
                 isDragging = false;
                 container.style.cursor = 'move';
             }});
-        }}
-        
-        function updateStats() {{
-            // Count nodes by type
-            const counts = {{}};
-            nodeData.forEach(node => {{
-                counts[node.type] = (counts[node.type] || 0) + 1;
-            }});
-            
-            // Create stats container if it doesn't exist
-            let statsContainer = document.querySelector('.stats-container');
-            if (!statsContainer) {{
-                statsContainer = document.createElement('div');
-                statsContainer.className = 'stats-container';
-                document.body.appendChild(statsContainer);
-            }}
-            
-            statsContainer.innerHTML = `
-                <div class="stats-item">
-                    <span class="stats-label">Total Nodes</span>
-                    <span class="stats-value">${{nodeData.length}}</span>
-                </div>
-                <div class="stats-item">
-                    <span class="stats-label">Tunnels</span>
-                    <span class="stats-value">${{counts.tunnel || 0}}</span>
-                </div>
-                <div class="stats-item">
-                    <span class="stats-label">Applications</span>
-                    <span class="stats-value">${{counts.application || 0}}</span>
-                </div>
-                <div class="stats-item">
-                    <span class="stats-label">Policies</span>
-                    <span class="stats-value">${{counts.policy || 0}}</span>
-                </div>
-            `;
         }}
         
         // Neighbourhood highlight on click
