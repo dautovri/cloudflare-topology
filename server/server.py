@@ -51,6 +51,12 @@ class _QuietHandler(WSGIRequestHandler):
 APP_DIR = Path(__file__).parent.parent
 OUTPUT_FILE = "network_topology.html"
 
+
+@app.route("/lib/<path:filename>")
+def serve_lib(filename):
+    """Serve pyvis helper files (e.g. lib/bindings/utils.js)."""
+    return send_from_directory(str(APP_DIR / "lib"), filename)
+
 ERROR_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
