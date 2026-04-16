@@ -92,8 +92,8 @@ class TopologyRenderer:
         target_dir.mkdir(parents=True, exist_ok=True)
 
         tmp_fd, tmp_path = tempfile.mkstemp(
-            prefix=f".{final_path.name}.",
-            suffix=".tmp",
+            prefix=f".{final_path.stem}.",
+            suffix=".html",
             dir=str(target_dir),
         )
         os.close(tmp_fd)  # pyvis opens by path
@@ -265,11 +265,19 @@ class TopologyRenderer:
             z-index: 1000;
             background: rgba(26, 26, 46, 0.95);
             padding: 15px;
-            border-radius: 12px;
+            border-radius: 8px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             min-width: 300px;
             max-width: 400px;
             cursor: move;
+        }
+
+        .search-container :focus-visible,
+        .legend-container :focus-visible,
+        button:focus-visible {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+            border-radius: 4px;
         }
         
         .search-container h3 {
@@ -380,7 +388,7 @@ class TopologyRenderer:
             z-index: 1000;
             background: rgba(26, 26, 46, 0.95);
             padding: 15px;
-            border-radius: 12px;
+            border-radius: 8px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             max-width: 200px;
         }
@@ -552,33 +560,15 @@ class TopologyRenderer:
         """
     
     def _get_header_html(self, node_counts: dict, timestamp: str) -> str:
-        """Get header HTML with branding and stats."""
+        """Get header HTML with branding and summary line."""
         total_resources = sum(node_counts.values())
-        
+
         # Cloudflare orange logo SVG
         logo_svg = '''<svg class="header-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.8 17.6L21.3 22.5C21.2 22.8 21.4 23.1 21.7 23.2C21.8 23.2 21.9 23.2 22 23.2H27.5C27.8 23.2 28 23 28 22.7C28 22.6 28 22.5 27.9 22.4L25.6 17.6C25.5 17.4 25.2 17.3 25 17.4C24.9 17.4 24.8 17.5 24.8 17.6L23.7 20.4L22.5 17.6C22.4 17.4 22.1 17.3 21.9 17.4C22 17.4 21.9 17.5 22.8 17.6Z" fill="#F6821F"/>
             <path d="M24.7 14.1C24.5 14.1 24.4 14 24.3 13.8C23.7 11.3 21.4 9.5 18.7 9.5C16.5 9.5 14.6 10.7 13.7 12.5C13.6 12.7 13.4 12.8 13.2 12.7C12.9 12.6 12.6 12.5 12.3 12.5C10.5 12.5 9 14 9 15.8C9 15.9 9 16 9 16.1C9 16.3 8.9 16.4 8.7 16.4C6.6 16.7 5 18.5 5 20.7C5 23.1 6.9 25 9.3 25H24.7C26.5 25 28 23.5 28 21.7C28 19.9 26.5 18.4 24.7 18.4C24.5 18.4 24.4 18.3 24.3 18.1C24 16.8 24 15.4 24.3 14.2C24.4 14.1 24.5 14.1 24.7 14.1Z" fill="#F6821F"/>
         </svg>'''
-        
-        # Build stats items
-        stats_html = ""
-        stat_types = [
-            ('tunnel', 'Tunnels'),
-            ('application', 'Apps'),
-            ('identity_provider', 'IdPs'),
-            ('virtual_network', 'VNets'),
-        ]
-        
-        for node_type, label in stat_types:
-            count = node_counts.get(node_type, 0)
-            if count > 0:
-                stats_html += f'''
-                <div class="stat-item">
-                    <div class="stat-value">{count}</div>
-                    <div class="stat-label">{label}</div>
-                </div>'''
-        
+
         return f"""
         <div class="header-container">
             <div class="header-content">
@@ -586,12 +576,8 @@ class TopologyRenderer:
                     {logo_svg}
                     <div>
                         <h1 class="header-title">Cloudflare Zero Trust Topology</h1>
-                        <p class="header-subtitle">Network visualization • {total_resources} resources</p>
+                        <p class="header-subtitle">{total_resources} resources &nbsp;·&nbsp; Updated {timestamp}</p>
                     </div>
-                </div>
-                <div class="header-stats">
-                    {stats_html}
-                    <div class="header-timestamp">Updated: {timestamp}</div>
                 </div>
             </div>
         </div>

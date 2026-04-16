@@ -3,8 +3,18 @@ Network graph builder for Cloudflare topology visualization.
 """
 
 import logging
+import re
 from typing import Dict, List, Set, Tuple, Optional, Any
 from dataclasses import dataclass, field
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
+def _display_label(name: str) -> str:
+    """Shorten bare UUIDs (no human name) to first 8 chars + ellipsis for readability."""
+    if name and _UUID_RE.match(name.strip()):
+        return name.strip()[:8] + "\u2026"
+    return name
 
 from config import NodeColors, NodeShapes
 from models.cloudflare_data import (
@@ -275,7 +285,7 @@ class NetworkGraphBuilder:
             node = NodeMetadata(
                 node_id=f"idp:{idp.id}",
                 node_type="identity_provider",
-                label=idp.name,
+                label=_display_label(idp.name) or (idp.idp_type or "IdP"),
                 color=NodeColors.IDENTITY_PROVIDER,
                 shape=NodeShapes.IDENTITY_PROVIDER,
                 size=25,
