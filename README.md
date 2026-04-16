@@ -53,7 +53,7 @@ Generate interactive network topology visualizations for your Cloudflare Zero Tr
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/yourusername/cloudflare-topology.git
+git clone https://github.com/dautovri/cloudflare-topology.git
 cd cloudflare-topology
 pip install -r requirements.txt
 ```
@@ -208,9 +208,11 @@ Options:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CLOUDFLARE_API_TOKEN` | ✅ | API token with Zero Trust read permissions |
-| `CLOUDFLARE_ACCOUNT_ID` | ✅ | Your Cloudflare account ID |
+| `CLOUDFLARE_API_TOKEN` | ✅* | API token with Zero Trust read permissions |
+| `CLOUDFLARE_ACCOUNT_ID` | ❌ | Auto-discovered from token; set only for multi-account tokens |
 | `DEBUG` | ❌ | Set to `true` for debug logging |
+
+> \* Not needed if you use `wrangler login` (Option A above).
 
 ---
 
