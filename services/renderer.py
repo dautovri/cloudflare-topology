@@ -723,7 +723,7 @@ class TopologyRenderer:
             
             query = query.toLowerCase().trim();
             
-            if (!query) {{
+            if (!query && activeFilter === 'all') {{
                 resultsContainer.innerHTML = '';
                 resetHighlighting();
                 return;
@@ -735,6 +735,9 @@ class TopologyRenderer:
                 if (activeFilter !== 'all' && node.type !== activeFilter) {{
                     return false;
                 }}
+                
+                // If no search query, match all nodes of the active filter type
+                if (!query) return true;
                 
                 // Search in label
                 if (node.label.toLowerCase().includes(query)) return true;
@@ -802,11 +805,9 @@ class TopologyRenderer:
                 btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
             }});
             
-            // Re-run search
+            // Apply filter (works with or without search text)
             const searchInput = document.getElementById('searchInput');
-            if (searchInput) {{
-                performSearch(searchInput.value);
-            }}
+            performSearch(searchInput ? searchInput.value : '');
         }}
         
         function selectNode(nodeId) {{
