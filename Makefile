@@ -105,3 +105,9 @@ help:
 	@echo "  CLOUDFLARE_API_TOKEN   - Cloudflare API token (required)"
 	@echo "  CLOUDFLARE_ACCOUNT_ID  - Cloudflare account ID (required)"
 	@echo "  PORT                   - Port to expose (default: 8080)"
+
+.PHONY: deploy-demo
+deploy-demo:
+	python main.py --demo --no-browser --output _deploy/index.html
+	cp -R lib _deploy/ 2>/dev/null || true
+	npx wrangler pages deploy _deploy --project-name=cloudflare-topology --branch=main --commit-dirty=true
