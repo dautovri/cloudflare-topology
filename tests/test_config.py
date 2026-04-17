@@ -2,7 +2,8 @@
 
 import os
 import pytest
-from config import Config, NodeColors, NodeShapes, APIEndpoints
+from unittest.mock import patch
+from config import Config, NodeColors, NodeShapes, APIEndpoints, _read_wrangler_token
 
 
 class TestNodeColors:
@@ -71,21 +72,42 @@ class TestConfig:
         assert config.account_id == "test-account"
         assert config.api_base_url == "https://api.cloudflare.com/client/v4"
 
-    def test_from_env_missing_token(self, monkeypatch):
-        """Test that missing API token raises error."""
+    def test_from_env_missing_token_and_no_wrangler(self, monkeypatch):
+        """Test that missing API token with no wrangler config raises error."""
         monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
-        monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
+        monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
         
-        with pytest.raises(ValueError, match="CLOUDFLARE_API_TOKEN"):
-            Config.from_env()
+        with patch("config._read_wrangler_token", return_value=None):
+            with pytest.raises(ValueError, match="No Cloudflare credentials found"):
+                Config.from_env()
 
-    def test_from_env_missing_account(self, monkeypatch):
-        """Test that missing account ID raises error."""
+    def test_from_env_missing_account_id_is_ok(self, monkeypatch):
+        """Test that missing account ID doesn't raise - it's auto-discovered later."""
         monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
         monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
         
-        with pytest.raises(ValueError, match="CLOUDFLARE_ACCOUNT_ID"):
-            Config.from_env()
+        config = Config.from_env()
+        assert config.api_token == "test-token"
+        assert config.account_id == ""
+
+    def test_from_env_falls_back_to_wrangler(self, monkeypatch):
+        """Test that wrangler OAuth token is used when env var is missing."""
+        monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+        monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+
+        with patch("config._read_wrangler_token", return_value="wrangler-oauth-token"):
+            config = Config.from_env()
+            assert config.api_token == "wrangler-oauth-token"
+
+    def test_env_token_takes_priority_over_wrangler(self, monkeypatch):
+        """Test that CLOUDFLARE_API_TOKEN takes priority over wrangler."""
+        monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "explicit-token")
+        monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+
+        with patch("config._read_wrangler_token", return_value="wrangler-oauth-token") as mock:
+            config = Config.from_env()
+            assert config.api_token == "explicit-token"
+            mock.assert_not_called()
 
 
 class TestAPIEndpoints:
@@ -140,3 +162,38 @@ class TestAPIEndpoints:
         """Test gateway rules endpoint generation."""
         endpoint = APIEndpoints.LIST_GATEWAY_RULES.format(account_id="acc-123")
         assert endpoint == "/accounts/acc-123/gateway/rules"
+
+
+class TestReadWranglerToken:
+    """Tests for _read_wrangler_token."""
+
+    def test_reads_valid_toml(self, tmp_path, monkeypatch):
+        """Test reading a valid wrangler config file."""
+        config_dir = tmp_path / ".wrangler" / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "default.toml").write_text(
+            'oauth_token = "my-oauth-token"\nrefresh_token = "rt"\n'
+        )
+        monkeypatch.setattr("config.Path.home", lambda: tmp_path)
+        assert _read_wrangler_token() == "my-oauth-token"
+
+    def test_returns_none_when_no_file(self, tmp_path, monkeypatch):
+        """Test returns None when wrangler config doesn't exist."""
+        monkeypatch.setattr("config.Path.home", lambda: tmp_path)
+        assert _read_wrangler_token() is None
+
+    def test_returns_none_when_empty_token(self, tmp_path, monkeypatch):
+        """Test returns None when oauth_token is empty."""
+        config_dir = tmp_path / ".wrangler" / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "default.toml").write_text('oauth_token = ""\n')
+        monkeypatch.setattr("config.Path.home", lambda: tmp_path)
+        assert _read_wrangler_token() is None
+
+    def test_returns_none_on_malformed_toml(self, tmp_path, monkeypatch):
+        """Test returns None on malformed TOML file."""
+        config_dir = tmp_path / ".wrangler" / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "default.toml").write_text("this is not valid toml {{{{")
+        monkeypatch.setattr("config.Path.home", lambda: tmp_path)
+        assert _read_wrangler_token() is None

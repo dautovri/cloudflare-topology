@@ -3,8 +3,9 @@
 ## Security & Reliability
 - [x] Auth on /regenerate endpoint — Fixed by /qa on main, 2026-04-15 (ISSUE-004)
 - [x] Security headers (CSP, X-Frame-Options, X-Content-Type-Options) — Fixed by /qa on main, 2026-04-15 (ISSUE-005)
-- [ ] Add caching/TTL for topology data (15 min TTL, regenerate in background)
-- [ ] Atomic file writes for OUTPUT_FILE (write to temp, rename on success)
+- [x] CSP blocks vis-network/bootstrap CDN resources — Fixed by /qa on main, 2026-04-16 (QA2-ISSUE-001)
+- [x] Add caching/TTL for topology data (15 min TTL, regenerate in background) — Shipped as scheduled regen in v0.2
+- [x] Atomic file writes for OUTPUT_FILE (write to temp, rename on success) — Shipped in v0.2 (renderer uses tempfile + os.replace)
 - [ ] Add CI/CD pipeline (.github/workflows/test.yml with pytest + mypy)
 - [x] Server version disclosure: Server header fully stripped via custom WSGIRequestHandler — Fixed by /qa on main, 2026-04-15 (ISSUE-008, was ISSUE-006)
 
@@ -24,6 +25,13 @@
 
 ## Code Quality
 - [x] Remove dead isinstance branch in main.py node_counts — Fixed by /qa on main, 2026-04-15 (ISSUE-007)
+- [x] lib/bindings/utils.js 404 via Flask — Fixed, added /lib/ route, /qa 2026-04-16 (QA2-ISSUE-002)
+- [x] Unused Bootstrap in pyvis output — Fixed, stripped in renderer, /qa 2026-04-16 (QA2-ISSUE-003)
+
+## UX (from /qa, 2026-04-16)
+- [x] Filter buttons do nothing without search text — Fixed in performSearch, /qa 2026-04-16 (QA2-ISSUE-004)
+- [x] Duplicate stats panel overlapping header — Fixed, removed updateStats, /qa 2026-04-16 (QA2-ISSUE-005)
+- [ ] IdP node shows UUID instead of name — Data issue from Cloudflare API (deferred)
 
 ## Design (from /design-review, 2026-04-15)
 - [x] 503 error page was raw JSON — Fixed, styled dark theme error page (FINDING-001)

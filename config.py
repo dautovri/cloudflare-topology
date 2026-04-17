@@ -2,9 +2,44 @@
 Configuration and constants for Cloudflare Network Topology Mapper.
 """
 
+import logging
 import os
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+def _read_wrangler_token() -> Optional[str]:
+    """Read OAuth token from wrangler's config file (~/.wrangler/config/default.toml)."""
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            try:
+                import tomli as tomllib  # type: ignore[no-redef]
+            except ModuleNotFoundError:
+                return None
+
+    candidates = [
+        Path.home() / ".wrangler" / "config" / "default.toml",
+        Path.home() / ".config" / ".wrangler" / "config" / "default.toml",
+    ]
+    for path in candidates:
+        if path.is_file():
+            try:
+                data = tomllib.loads(path.read_text())
+                token = data.get("oauth_token", "")
+                if token:
+                    logger.info(f"Using OAuth token from wrangler config ({path})")
+                    return token
+            except Exception:
+                continue
+    return None
 
 
 @dataclass
@@ -44,7 +79,7 @@ class Config:
     
     # Cloudflare API settings
     api_token: str
-    account_id: str
+    account_id: str = ""
     api_base_url: str = "https://api.cloudflare.com/client/v4"
     
     # Output settings
@@ -67,15 +102,27 @@ class Config:
     
     @classmethod
     def from_env(cls) -> "Config":
-        """Create configuration from environment variables."""
+        """Create configuration from environment variables or wrangler OAuth token.
+
+        Auth priority:
+          1. CLOUDFLARE_API_TOKEN env var (explicit token)
+          2. Wrangler OAuth token from ~/.wrangler/config/default.toml
+        Account ID:
+          - CLOUDFLARE_ACCOUNT_ID env var if set, otherwise auto-discovered later.
+        """
         api_token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
         account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
-        
+
         if not api_token:
-            raise ValueError("CLOUDFLARE_API_TOKEN environment variable is required")
-        if not account_id:
-            raise ValueError("CLOUDFLARE_ACCOUNT_ID environment variable is required")
-        
+            api_token = _read_wrangler_token() or ""
+
+        if not api_token:
+            raise ValueError(
+                "No Cloudflare credentials found. Either:\n"
+                "  1. Run 'wrangler login' (easiest — browser OAuth, zero config)\n"
+                "  2. Set CLOUDFLARE_API_TOKEN environment variable"
+            )
+
         return cls(
             api_token=api_token,
             account_id=account_id,

@@ -48,6 +48,28 @@ class CloudflareAPIClient:
             "Content-Type": "application/json",
         })
         self._last_request_time = 0.0
+        
+        if not self.config.account_id:
+            self.config.account_id = self._discover_account_id()
+    
+    def _discover_account_id(self) -> str:
+        """Auto-discover account ID from the API token."""
+        logger.info("No account ID provided, discovering from token...")
+        result = self._make_request("GET", "/accounts", params={"per_page": 1})
+        accounts = result.get("result", [])
+        if not accounts:
+            raise CloudflareAPIError("No accounts found for this API token")
+        account_id = accounts[0]["id"]
+        if len(accounts) == 1 or result.get("result_info", {}).get("total_count", 1) == 1:
+            logger.info(f"Discovered account: {accounts[0].get('name', account_id)} ({account_id})")
+        else:
+            total = result.get("result_info", {}).get("total_count", "multiple")
+            logger.warning(
+                f"Token has access to {total} accounts, using first: "
+                f"{accounts[0].get('name', account_id)} ({account_id}). "
+                f"Set CLOUDFLARE_ACCOUNT_ID to override."
+            )
+        return account_id
     
     def _rate_limit(self) -> None:
         """Apply rate limiting between requests."""
@@ -540,6 +562,17 @@ class CloudflareAPIClient:
     # Full Topology Fetch
     # -------------------------------------------------------------------------
     
+    def _try_fetch(self, name: str, fetcher):
+        """Call fetcher and return its result, returning [] on 403 permission errors."""
+        try:
+            return fetcher()
+        except CloudflareAPIError as e:
+            if e.status_code == 403:
+                logger.warning(f"No permission to fetch {name} (HTTP 403) — skipping. "
+                               f"Grant additional token permissions to include this resource.")
+                return []
+            raise
+
     def fetch_topology(
         self,
         include_tunnel_configs: bool = True,
@@ -567,7 +600,7 @@ class CloudflareAPIClient:
         )
         
         # Fetch tunnels
-        topology.tunnels = self.list_tunnels()
+        topology.tunnels = self._try_fetch("tunnels", self.list_tunnels)
         
         # Fetch tunnel configs if requested
         if include_tunnel_configs:
@@ -578,7 +611,7 @@ class CloudflareAPIClient:
                         tunnel.config = config
         
         # Fetch applications
-        topology.applications = self.list_applications()
+        topology.applications = self._try_fetch("applications", self.list_applications)
         
         # Fetch app policies if requested
         if include_app_policies:
@@ -586,25 +619,25 @@ class CloudflareAPIClient:
                 app.policies = self.get_application_policies(app.id)
         
         # Fetch reusable policies
-        topology.policies = self.list_policies()
+        topology.policies = self._try_fetch("policies", self.list_policies)
         
         # Fetch groups
-        topology.groups = self.list_groups()
+        topology.groups = self._try_fetch("groups", self.list_groups)
         
         # Fetch identity providers
-        topology.identity_providers = self.list_identity_providers()
+        topology.identity_providers = self._try_fetch("identity_providers", self.list_identity_providers)
         
         # Fetch networks
-        topology.virtual_networks = self.list_virtual_networks()
-        topology.routes = self.list_routes()
+        topology.virtual_networks = self._try_fetch("virtual_networks", self.list_virtual_networks)
+        topology.routes = self._try_fetch("routes", self.list_routes)
         
         # Fetch devices if requested
         if include_devices:
-            topology.devices = self.list_devices()
+            topology.devices = self._try_fetch("devices", self.list_devices)
         
         # Fetch gateway rules if requested
         if include_gateway_rules:
-            topology.gateway_rules = self.list_gateway_rules()
+            topology.gateway_rules = self._try_fetch("gateway_rules", self.list_gateway_rules)
         
         logger.info(f"Topology fetch complete. Total resources: {topology.total_resources}")
         return topology

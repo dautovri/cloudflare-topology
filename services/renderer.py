@@ -4,6 +4,8 @@ HTML renderer for Cloudflare topology visualization using Pyvis.
 
 import logging
 import json
+import os
+import tempfile
 from typing import Optional
 from pathlib import Path
 
@@ -82,12 +84,32 @@ class TopologyRenderer:
                 arrows="to",
             )
         
-        # Generate HTML
-        net.write_html(output_path, notebook=False, open_browser=False)
-        
-        # Inject custom CSS and JavaScript
-        self._inject_customizations(output_path, graph, node_counts)
-        
+        # Generate HTML atomically: write to a temp file in the same directory,
+        # inject customisations, then os.replace to the final path. Prevents
+        # partial/empty files if the process is killed mid-write.
+        final_path = Path(output_path)
+        target_dir = final_path.parent if str(final_path.parent) else Path(".")
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            prefix=f".{final_path.stem}.",
+            suffix=".html",
+            dir=str(target_dir),
+        )
+        os.close(tmp_fd)  # pyvis opens by path
+
+        try:
+            net.write_html(tmp_path, notebook=False, open_browser=False)
+            self._inject_customizations(tmp_path, graph, node_counts)
+            os.replace(tmp_path, output_path)
+        except Exception:
+            # Best-effort cleanup of temp file on failure
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
         logger.info(f"Rendered topology with {len(graph.nodes)} nodes and {len(graph.edges)} edges")
         return output_path
     
@@ -157,6 +179,15 @@ class TopologyRenderer:
         html_content = html_content.replace('<center>\n<h1></h1>\n</center>', '')
         html_content = html_content.replace('<center>\n          <h1></h1>\n        </center>', '')
         
+        # Remove Bootstrap (unused — custom CSS handles all styling)
+        import re
+        html_content = re.sub(
+            r'<link[^>]*cdn\.jsdelivr\.net/npm/bootstrap[^>]*/>\s*', '', html_content
+        )
+        html_content = re.sub(
+            r'<script[^>]*cdn\.jsdelivr\.net/npm/bootstrap[^>]*></script>\s*', '', html_content
+        )
+        
         # Prepare node metadata for search
         node_data = []
         for node in graph.get_node_list():
@@ -206,6 +237,27 @@ class TopologyRenderer:
     def _get_custom_css(self) -> str:
         """Get custom CSS for the visualization."""
         return """
+        :root {
+            --bg-base: #1a1a2e;
+            --bg-surface: #16213e;
+            --bg-surface-hover: #1f2d50;
+            --bg-surface-alpha: rgba(22, 33, 62, 0.95);
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --text-tertiary: #64748b;
+            --accent: #3b82f6;
+            --accent-hover: #60a5fa;
+            --border-color: #334155;
+            --border-hover: #475569;
+            
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 16px;
+            --space-4: 24px;
+            --radius: 8px;
+            --radius-inner: 6px;
+        }
+        
         * {
             box-sizing: border-box;
         }
@@ -214,8 +266,8 @@ class TopologyRenderer:
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: #1a1a2e;
-            color: #ffffff;
+            background: var(--bg-base);
+            color: var(--text-primary);
         }
         
         #mynetwork {
@@ -229,22 +281,31 @@ class TopologyRenderer:
         /* Search Box */
         .search-container {
             position: fixed;
-            top: 20px;
-            left: 20px;
+            top: var(--space-4);
+            left: var(--space-4);
             z-index: 1000;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            background: var(--bg-surface-alpha);
+            padding: var(--space-3);
+            border-radius: var(--radius);
+            box-shadow: 0 var(--space-1) var(--space-4) rgba(0, 0, 0, 0.3);
             min-width: 300px;
             max-width: 400px;
             cursor: move;
+            border: 1px solid var(--border-color);
+        }
+
+        .search-container :focus-visible,
+        .legend-container :focus-visible,
+        button:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+            border-radius: var(--radius-inner);
         }
         
         .search-container h3 {
-            margin: 0 0 10px 0;
+            margin: 0 0 var(--space-3) 0;
             font-size: 14px;
-            color: #888;
+            color: var(--text-secondary);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -252,112 +313,118 @@ class TopologyRenderer:
         
         .search-input {
             width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #333;
-            border-radius: 8px;
-            background: #16213e;
-            color: #fff;
+            padding: var(--space-2) var(--space-3);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            background: var(--bg-surface);
+            color: var(--text-primary);
             font-size: 14px;
             outline: none;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
         
         .search-input:focus {
-            border-color: #3b82f6;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 1px var(--accent);
         }
         
         .search-input::placeholder {
-            color: #666;
+            color: var(--text-tertiary);
         }
         
         .filter-buttons {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 10px;
+            gap: var(--space-2);
+            margin-top: var(--space-3);
         }
         
         .filter-btn {
-            padding: 5px 10px;
-            border: 1px solid #333;
-            border-radius: 6px;
-            background: #16213e;
-            color: #888;
-            font-size: 11px;
+            padding: var(--space-1) var(--space-2);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-inner);
+            background: var(--bg-surface);
+            color: var(--text-secondary);
+            font-size: 12px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease-in-out;
+            font-weight: 500;
         }
         
         .filter-btn:hover {
-            border-color: #555;
-            color: #fff;
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+            background: var(--bg-surface-hover);
         }
         
         .filter-btn.active {
-            background: #3b82f6;
-            border-color: #3b82f6;
-            color: #fff;
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--text-primary);
         }
         
         .search-results {
-            margin-top: 10px;
+            margin-top: var(--space-3);
             max-height: 200px;
             overflow-y: auto;
-            font-size: 12px;
+            font-size: 13px;
         }
         
         .search-result-item {
-            padding: 8px 10px;
-            border-radius: 6px;
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-inner);
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: var(--space-2);
             transition: background 0.2s;
         }
         
         .search-result-item:hover {
-            background: #16213e;
+            background: var(--bg-surface-hover);
         }
         
         .result-type {
-            padding: 2px 6px;
-            border-radius: 4px;
+            padding: 2px var(--space-1);
+            border-radius: var(--space-1);
             font-size: 10px;
             text-transform: uppercase;
+            font-weight: 600;
         }
         
         .clear-btn {
             background: none;
             border: none;
-            color: #666;
+            color: var(--text-secondary);
             cursor: pointer;
             font-size: 18px;
             padding: 0;
             line-height: 1;
+            transition: color 0.2s;
         }
         
         .clear-btn:hover {
-            color: #fff;
+            color: var(--text-primary);
         }
         
         /* Legend */
         .legend-container {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            bottom: var(--space-4);
+            right: var(--space-4);
             z-index: 1000;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            background: var(--bg-surface-alpha);
+            padding: var(--space-3);
+            border-radius: var(--radius);
+            box-shadow: 0 var(--space-1) var(--space-4) rgba(0, 0, 0, 0.3);
             max-width: 200px;
+            border: 1px solid var(--border-color);
         }
         
         .legend-container h4 {
-            margin: 0 0 10px 0;
-            font-size: 12px;
-            color: #888;
+            margin: 0 0 var(--space-3) 0;
+            font-size: 13px;
+            color: var(--text-secondary);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -366,32 +433,34 @@ class TopologyRenderer:
         .legend-toggle {
             background: none;
             border: none;
-            color: #888;
+            color: var(--text-secondary);
             cursor: pointer;
             font-size: 12px;
+            transition: color 0.2s;
         }
         
         .legend-toggle:hover {
-            color: #fff;
+            color: var(--text-primary);
         }
         
         .legend-items {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: var(--space-2);
         }
         
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 12px;
+            gap: var(--space-2);
+            font-size: 13px;
+            color: var(--text-primary);
         }
         
         .legend-color {
-            width: 16px;
-            height: 16px;
-            border-radius: 4px;
+            width: var(--space-3);
+            height: var(--space-3);
+            border-radius: var(--space-1);
             flex-shrink: 0;
         }
         
@@ -399,46 +468,23 @@ class TopologyRenderer:
             display: none;
         }
         
-        /* Stats */
-        .stats-container {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 12px 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            font-size: 12px;
-        }
-        
-        .stats-item {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 4px;
-        }
-        
-        .stats-item:last-child {
-            margin-bottom: 0;
-        }
-        
-        .stats-label {
-            color: #888;
-        }
-        
-        .stats-value {
-            font-weight: 600;
-        }
-        
         /* Scrollbar */
         ::-webkit-scrollbar {
-            width: 6px;
+            width: var(--space-2);
         }
         
         ::-webkit-scrollbar-track {
-            background: #16213e;
-            border-radius: 3px;
+            background: var(--bg-surface);
+            border-radius: var(--space-1);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: var(--space-1);
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-hover);
         }
         
         ::-webkit-scrollbar-thumb {
@@ -553,33 +599,15 @@ class TopologyRenderer:
         """
     
     def _get_header_html(self, node_counts: dict, timestamp: str) -> str:
-        """Get header HTML with branding and stats."""
+        """Get header HTML with branding and summary line."""
         total_resources = sum(node_counts.values())
-        
+
         # Cloudflare orange logo SVG
         logo_svg = '''<svg class="header-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.8 17.6L21.3 22.5C21.2 22.8 21.4 23.1 21.7 23.2C21.8 23.2 21.9 23.2 22 23.2H27.5C27.8 23.2 28 23 28 22.7C28 22.6 28 22.5 27.9 22.4L25.6 17.6C25.5 17.4 25.2 17.3 25 17.4C24.9 17.4 24.8 17.5 24.8 17.6L23.7 20.4L22.5 17.6C22.4 17.4 22.1 17.3 21.9 17.4C22 17.4 21.9 17.5 22.8 17.6Z" fill="#F6821F"/>
             <path d="M24.7 14.1C24.5 14.1 24.4 14 24.3 13.8C23.7 11.3 21.4 9.5 18.7 9.5C16.5 9.5 14.6 10.7 13.7 12.5C13.6 12.7 13.4 12.8 13.2 12.7C12.9 12.6 12.6 12.5 12.3 12.5C10.5 12.5 9 14 9 15.8C9 15.9 9 16 9 16.1C9 16.3 8.9 16.4 8.7 16.4C6.6 16.7 5 18.5 5 20.7C5 23.1 6.9 25 9.3 25H24.7C26.5 25 28 23.5 28 21.7C28 19.9 26.5 18.4 24.7 18.4C24.5 18.4 24.4 18.3 24.3 18.1C24 16.8 24 15.4 24.3 14.2C24.4 14.1 24.5 14.1 24.7 14.1Z" fill="#F6821F"/>
         </svg>'''
-        
-        # Build stats items
-        stats_html = ""
-        stat_types = [
-            ('tunnel', 'Tunnels'),
-            ('application', 'Apps'),
-            ('identity_provider', 'IdPs'),
-            ('virtual_network', 'VNets'),
-        ]
-        
-        for node_type, label in stat_types:
-            count = node_counts.get(node_type, 0)
-            if count > 0:
-                stats_html += f'''
-                <div class="stat-item">
-                    <div class="stat-value">{count}</div>
-                    <div class="stat-label">{label}</div>
-                </div>'''
-        
+
         return f"""
         <div class="header-container">
             <div class="header-content">
@@ -587,12 +615,8 @@ class TopologyRenderer:
                     {logo_svg}
                     <div>
                         <h1 class="header-title">Cloudflare Zero Trust Topology</h1>
-                        <p class="header-subtitle">Network visualization • {total_resources} resources</p>
+                        <p class="header-subtitle">{total_resources} resources &nbsp;·&nbsp; Updated {timestamp}</p>
                     </div>
-                </div>
-                <div class="header-stats">
-                    {stats_html}
-                    <div class="header-timestamp">Updated: {timestamp}</div>
                 </div>
             </div>
         </div>
@@ -698,7 +722,6 @@ class TopologyRenderer:
         document.addEventListener('DOMContentLoaded', function() {{
             initializeSearch();
             initializeDragFunctionality();
-            updateStats();
         }});
         
         function initializeSearch() {{
@@ -714,7 +737,7 @@ class TopologyRenderer:
             
             query = query.toLowerCase().trim();
             
-            if (!query) {{
+            if (!query && activeFilter === 'all') {{
                 resultsContainer.innerHTML = '';
                 resetHighlighting();
                 return;
@@ -726,6 +749,9 @@ class TopologyRenderer:
                 if (activeFilter !== 'all' && node.type !== activeFilter) {{
                     return false;
                 }}
+                
+                // If no search query, match all nodes of the active filter type
+                if (!query) return true;
                 
                 // Search in label
                 if (node.label.toLowerCase().includes(query)) return true;
@@ -793,11 +819,9 @@ class TopologyRenderer:
                 btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
             }});
             
-            // Re-run search
+            // Apply filter (works with or without search text)
             const searchInput = document.getElementById('searchInput');
-            if (searchInput) {{
-                performSearch(searchInput.value);
-            }}
+            performSearch(searchInput ? searchInput.value : '');
         }}
         
         function selectNode(nodeId) {{
@@ -919,41 +943,6 @@ class TopologyRenderer:
                 isDragging = false;
                 container.style.cursor = 'move';
             }});
-        }}
-        
-        function updateStats() {{
-            // Count nodes by type
-            const counts = {{}};
-            nodeData.forEach(node => {{
-                counts[node.type] = (counts[node.type] || 0) + 1;
-            }});
-            
-            // Create stats container if it doesn't exist
-            let statsContainer = document.querySelector('.stats-container');
-            if (!statsContainer) {{
-                statsContainer = document.createElement('div');
-                statsContainer.className = 'stats-container';
-                document.body.appendChild(statsContainer);
-            }}
-            
-            statsContainer.innerHTML = `
-                <div class="stats-item">
-                    <span class="stats-label">Total Nodes</span>
-                    <span class="stats-value">${{nodeData.length}}</span>
-                </div>
-                <div class="stats-item">
-                    <span class="stats-label">Tunnels</span>
-                    <span class="stats-value">${{counts.tunnel || 0}}</span>
-                </div>
-                <div class="stats-item">
-                    <span class="stats-label">Applications</span>
-                    <span class="stats-value">${{counts.application || 0}}</span>
-                </div>
-                <div class="stats-item">
-                    <span class="stats-label">Policies</span>
-                    <span class="stats-value">${{counts.policy || 0}}</span>
-                </div>
-            `;
         }}
         
         // Neighbourhood highlight on click
