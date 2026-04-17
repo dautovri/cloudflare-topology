@@ -237,6 +237,27 @@ class TopologyRenderer:
     def _get_custom_css(self) -> str:
         """Get custom CSS for the visualization."""
         return """
+        :root {
+            --bg-base: #1a1a2e;
+            --bg-surface: #16213e;
+            --bg-surface-hover: #1f2d50;
+            --bg-surface-alpha: rgba(22, 33, 62, 0.95);
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --text-tertiary: #64748b;
+            --accent: #3b82f6;
+            --accent-hover: #60a5fa;
+            --border-color: #334155;
+            --border-hover: #475569;
+            
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 16px;
+            --space-4: 24px;
+            --radius: 8px;
+            --radius-inner: 6px;
+        }
+        
         * {
             box-sizing: border-box;
         }
@@ -245,8 +266,8 @@ class TopologyRenderer:
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: #1a1a2e;
-            color: #ffffff;
+            background: var(--bg-base);
+            color: var(--text-primary);
         }
         
         #mynetwork {
@@ -260,30 +281,31 @@ class TopologyRenderer:
         /* Search Box */
         .search-container {
             position: fixed;
-            top: 20px;
-            left: 20px;
+            top: var(--space-4);
+            left: var(--space-4);
             z-index: 1000;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            background: var(--bg-surface-alpha);
+            padding: var(--space-3);
+            border-radius: var(--radius);
+            box-shadow: 0 var(--space-1) var(--space-4) rgba(0, 0, 0, 0.3);
             min-width: 300px;
             max-width: 400px;
             cursor: move;
+            border: 1px solid var(--border-color);
         }
 
         .search-container :focus-visible,
         .legend-container :focus-visible,
         button:focus-visible {
-            outline: 2px solid #3b82f6;
+            outline: 2px solid var(--accent);
             outline-offset: 2px;
-            border-radius: 4px;
+            border-radius: var(--radius-inner);
         }
         
         .search-container h3 {
-            margin: 0 0 10px 0;
+            margin: 0 0 var(--space-3) 0;
             font-size: 14px;
-            color: #888;
+            color: var(--text-secondary);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -291,112 +313,118 @@ class TopologyRenderer:
         
         .search-input {
             width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #333;
-            border-radius: 8px;
-            background: #16213e;
-            color: #fff;
+            padding: var(--space-2) var(--space-3);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            background: var(--bg-surface);
+            color: var(--text-primary);
             font-size: 14px;
             outline: none;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
         
         .search-input:focus {
-            border-color: #3b82f6;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 1px var(--accent);
         }
         
         .search-input::placeholder {
-            color: #666;
+            color: var(--text-tertiary);
         }
         
         .filter-buttons {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 10px;
+            gap: var(--space-2);
+            margin-top: var(--space-3);
         }
         
         .filter-btn {
-            padding: 5px 10px;
-            border: 1px solid #333;
-            border-radius: 6px;
-            background: #16213e;
-            color: #888;
-            font-size: 11px;
+            padding: var(--space-1) var(--space-2);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-inner);
+            background: var(--bg-surface);
+            color: var(--text-secondary);
+            font-size: 12px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease-in-out;
+            font-weight: 500;
         }
         
         .filter-btn:hover {
-            border-color: #555;
-            color: #fff;
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+            background: var(--bg-surface-hover);
         }
         
         .filter-btn.active {
-            background: #3b82f6;
-            border-color: #3b82f6;
-            color: #fff;
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--text-primary);
         }
         
         .search-results {
-            margin-top: 10px;
+            margin-top: var(--space-3);
             max-height: 200px;
             overflow-y: auto;
-            font-size: 12px;
+            font-size: 13px;
         }
         
         .search-result-item {
-            padding: 8px 10px;
-            border-radius: 6px;
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-inner);
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: var(--space-2);
             transition: background 0.2s;
         }
         
         .search-result-item:hover {
-            background: #16213e;
+            background: var(--bg-surface-hover);
         }
         
         .result-type {
-            padding: 2px 6px;
-            border-radius: 4px;
+            padding: 2px var(--space-1);
+            border-radius: var(--space-1);
             font-size: 10px;
             text-transform: uppercase;
+            font-weight: 600;
         }
         
         .clear-btn {
             background: none;
             border: none;
-            color: #666;
+            color: var(--text-secondary);
             cursor: pointer;
             font-size: 18px;
             padding: 0;
             line-height: 1;
+            transition: color 0.2s;
         }
         
         .clear-btn:hover {
-            color: #fff;
+            color: var(--text-primary);
         }
         
         /* Legend */
         .legend-container {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            bottom: var(--space-4);
+            right: var(--space-4);
             z-index: 1000;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            background: var(--bg-surface-alpha);
+            padding: var(--space-3);
+            border-radius: var(--radius);
+            box-shadow: 0 var(--space-1) var(--space-4) rgba(0, 0, 0, 0.3);
             max-width: 200px;
+            border: 1px solid var(--border-color);
         }
         
         .legend-container h4 {
-            margin: 0 0 10px 0;
-            font-size: 12px;
-            color: #888;
+            margin: 0 0 var(--space-3) 0;
+            font-size: 13px;
+            color: var(--text-secondary);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -405,32 +433,34 @@ class TopologyRenderer:
         .legend-toggle {
             background: none;
             border: none;
-            color: #888;
+            color: var(--text-secondary);
             cursor: pointer;
             font-size: 12px;
+            transition: color 0.2s;
         }
         
         .legend-toggle:hover {
-            color: #fff;
+            color: var(--text-primary);
         }
         
         .legend-items {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: var(--space-2);
         }
         
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 12px;
+            gap: var(--space-2);
+            font-size: 13px;
+            color: var(--text-primary);
         }
         
         .legend-color {
-            width: 16px;
-            height: 16px;
-            border-radius: 4px;
+            width: var(--space-3);
+            height: var(--space-3);
+            border-radius: var(--space-1);
             flex-shrink: 0;
         }
         
@@ -440,12 +470,21 @@ class TopologyRenderer:
         
         /* Scrollbar */
         ::-webkit-scrollbar {
-            width: 6px;
+            width: var(--space-2);
         }
         
         ::-webkit-scrollbar-track {
-            background: #16213e;
-            border-radius: 3px;
+            background: var(--bg-surface);
+            border-radius: var(--space-1);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: var(--space-1);
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-hover);
         }
         
         ::-webkit-scrollbar-thumb {
