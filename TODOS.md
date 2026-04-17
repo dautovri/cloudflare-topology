@@ -15,7 +15,7 @@
 - [ ] Config file support (--config topology.json)
 
 ## DX Improvements
-- [ ] Add .env.example and python-dotenv support
+- [x] Add .env.example and python-dotenv support
 - [ ] Standardize CLI flags (--include-gateway → --no-gateway for consistency)
 - [ ] Add troubleshooting section to README
 - [ ] Add performance guidance in docs (large accounts, timeout tips)

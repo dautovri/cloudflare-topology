@@ -60,18 +60,41 @@ pip install -r requirements.txt
 
 ### 2. Authenticate
 
-**Option A — Zero config (recommended):** If you have [wrangler](https://developers.cloudflare.com/workers/wrangler/) installed and logged in, it just works:
+Pick whichever is easiest — the tool tries them in order:
+
+**Option A — Zero config (recommended):** If you have [wrangler](https://developers.cloudflare.com/workers/wrangler/) installed:
 
 ```bash
 wrangler login          # one-time: opens browser, click Allow
 python main.py          # done — uses wrangler's OAuth token automatically
 ```
 
-**Option B — API token:** Set the environment variable:
+**Option B — Guided setup:** Interactive wizard writes a `.env` file for you:
+
+```bash
+python main.py --setup  # opens the token page, prompts for token, saves .env
+python main.py
+```
+
+**Option C — `.env` file:** Copy the template and fill in your token:
+
+```bash
+cp .env.example .env
+# edit .env, set CLOUDFLARE_API_TOKEN=...
+python main.py
+```
+
+**Option D — Environment variable:**
 
 ```bash
 export CLOUDFLARE_API_TOKEN="your-api-token"
 python main.py
+```
+
+**Option E — Try it without an account:**
+
+```bash
+python main.py --demo   # synthetic topology, no Cloudflare API calls
 ```
 
 > **Account ID** is auto-discovered from your token. Set `CLOUDFLARE_ACCOUNT_ID` only if your token has access to multiple accounts and you want a specific one.

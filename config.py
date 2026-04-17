@@ -12,6 +12,27 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _load_dotenv_if_present() -> None:
+    """Load a .env file from the project root if present. No-op if missing.
+
+    Runs once on import. Does not overwrite variables already set in the shell.
+    """
+    try:
+        from dotenv import load_dotenv  # type: ignore[import-not-found]
+    except ModuleNotFoundError:
+        return
+    # Project root (one level up from this file if inside a package, else cwd)
+    here = Path(__file__).resolve().parent
+    for candidate in (here / ".env", Path.cwd() / ".env"):
+        if candidate.is_file():
+            load_dotenv(candidate, override=False)
+            logger.debug(f"Loaded environment from {candidate}")
+            return
+
+
+_load_dotenv_if_present()
+
+
 def _read_wrangler_token() -> Optional[str]:
     """Read OAuth token from wrangler's config file (~/.wrangler/config/default.toml)."""
     if sys.version_info >= (3, 11):
@@ -118,9 +139,16 @@ class Config:
 
         if not api_token:
             raise ValueError(
-                "No Cloudflare credentials found. Either:\n"
-                "  1. Run 'wrangler login' (easiest — browser OAuth, zero config)\n"
-                "  2. Set CLOUDFLARE_API_TOKEN environment variable"
+                "No Cloudflare credentials found. Pick one:\n"
+                "\n"
+                "  1. wrangler login                  (easiest — browser OAuth)\n"
+                "  2. python main.py --setup          (guided: creates .env for you)\n"
+                "  3. cp .env.example .env            (then edit and fill in your token)\n"
+                "  4. export CLOUDFLARE_API_TOKEN=... (one-off for this shell)\n"
+                "  5. python main.py --demo           (skip auth, use synthetic data)\n"
+                "\n"
+                "Create a token with 'Zero Trust: Read' + 'Access: Apps and Policies: Read':\n"
+                "  https://dash.cloudflare.com/profile/api-tokens"
             )
 
         return cls(
