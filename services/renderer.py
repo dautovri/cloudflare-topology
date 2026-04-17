@@ -413,13 +413,17 @@ class TopologyRenderer:
             bottom: var(--space-4);
             right: var(--space-4);
             z-index: 1000;
-            background: var(--bg-surface-alpha);
+            background: var(--bg-surface);
             padding: var(--space-3);
             border-radius: var(--radius);
-            box-shadow: 0 var(--space-1) var(--space-4) rgba(0, 0, 0, 0.3);
+            box-shadow: 0 var(--space-1) var(--space-4) rgba(0, 0, 0, 0.45);
             max-width: 200px;
             border: 1px solid var(--border-color);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
         }
+        .legend-container:hover { opacity: 1; }
+        .legend-container { opacity: 0.96; transition: opacity 0.15s ease; }
         
         .legend-container h4 {
             margin: 0 0 var(--space-3) 0;

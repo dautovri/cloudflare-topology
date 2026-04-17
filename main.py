@@ -109,7 +109,13 @@ Environment Variables:
         action="store_true",
         help="Include Gateway firewall rules",
     )
-    
+
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Use synthetic demo data (no Cloudflare API calls). Safe for public deploys.",
+    )
+
     return parser.parse_args()
 
 
@@ -125,24 +131,33 @@ def main() -> int:
     logger.info("=" * 50)
     
     try:
-        # Load configuration from environment
-        config = Config.from_env()
-        config.debug = args.debug
-        config.output_file = args.output
-        
-        # Initialize API client (auto-discovers account ID if needed)
-        api_client = CloudflareAPIClient(config)
-        
-        logger.info(f"Account ID: {config.account_id}")
-        
-        # Fetch topology data
-        logger.info("📡 Fetching topology data from Cloudflare API...")
-        topology = api_client.fetch_topology(
-            include_tunnel_configs=not args.no_tunnel_configs,
-            include_app_policies=True,
-            include_devices=not args.no_devices,
-            include_gateway_rules=args.include_gateway,
-        )
+        if args.demo:
+            from services.demo_data import build_demo_topology
+
+            logger.info("🎭 Demo mode — using synthetic data (no Cloudflare API calls)")
+            config = Config(api_token="demo", account_id="demo-account")
+            config.debug = args.debug
+            config.output_file = args.output
+            topology = build_demo_topology()
+        else:
+            # Load configuration from environment
+            config = Config.from_env()
+            config.debug = args.debug
+            config.output_file = args.output
+
+            # Initialize API client (auto-discovers account ID if needed)
+            api_client = CloudflareAPIClient(config)
+
+            logger.info(f"Account ID: {config.account_id}")
+
+            # Fetch topology data
+            logger.info("📡 Fetching topology data from Cloudflare API...")
+            topology = api_client.fetch_topology(
+                include_tunnel_configs=not args.no_tunnel_configs,
+                include_app_policies=True,
+                include_devices=not args.no_devices,
+                include_gateway_rules=args.include_gateway,
+            )
         
         # Print summary
         logger.info("")
