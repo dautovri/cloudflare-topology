@@ -106,8 +106,24 @@ help:
 	@echo "  CLOUDFLARE_ACCOUNT_ID  - Cloudflare account ID (required)"
 	@echo "  PORT                   - Port to expose (default: 8080)"
 
-.PHONY: deploy-demo
+.PHONY: deploy-demo deploy
+# Cloudflare Pages project name (override for your own deploy)
+PAGES_PROJECT ?= cloudflare-topology
+
+# Deploy the synthetic demo (no API token required)
 deploy-demo:
 	python main.py --demo --no-browser --output _deploy/index.html
 	cp -R lib _deploy/ 2>/dev/null || true
-	npx wrangler pages deploy _deploy --project-name=cloudflare-topology --branch=main --commit-dirty=true
+	npx wrangler pages deploy _deploy --project-name=$(PAGES_PROJECT) --branch=main --commit-dirty=true
+
+# Deploy with your real topology (requires CLOUDFLARE_API_TOKEN)
+# WARNING: output contains tunnel names, app domains, and policy details.
+# Protect the Pages URL with Cloudflare Access before sharing.
+deploy:
+	@if [ -z "$$CLOUDFLARE_API_TOKEN" ]; then \
+		echo "Error: CLOUDFLARE_API_TOKEN is not set. Run 'make deploy-demo' for a safe demo deploy."; \
+		exit 1; \
+	fi
+	python main.py --no-browser --output _deploy/index.html
+	cp -R lib _deploy/ 2>/dev/null || true
+	npx wrangler pages deploy _deploy --project-name=$(PAGES_PROJECT) --branch=main --commit-dirty=true

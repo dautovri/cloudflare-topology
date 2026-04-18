@@ -12,6 +12,14 @@ Generate interactive network topology visualizations for your Cloudflare Zero Tr
 
 ---
 
+## 🎮 Try it online
+
+**[→ cloudflare-topology.pages.dev](https://cloudflare-topology.pages.dev)** — live demo with synthetic data, no login, no API token.
+
+Want it on your own Cloudflare account with real data? See **[Deploy your own](#-deploy-your-own)** below (~2 minutes).
+
+---
+
 ## 📸 Screenshot
 
 <p align="center">
@@ -123,6 +131,67 @@ python main.py --include-gateway
 # Debug mode with verbose output
 python main.py --debug
 ```
+
+---
+
+## 🌍 Deploy your own
+
+Ship a static version of the topology to your own Cloudflare Pages project — free tier, custom domain, HTTPS included.
+
+### One-time setup
+
+```bash
+npm install -g wrangler          # Cloudflare's CLI
+wrangler login                   # browser OAuth
+```
+
+### Deploy (demo data, no token needed)
+
+```bash
+# First time: pick a unique project name on your account
+PAGES_PROJECT=my-cf-topology make deploy-demo
+
+# Subsequent deploys: just
+make deploy-demo
+```
+
+Wrangler prints a `*.pages.dev` URL. Re-run any time you want to refresh.
+
+### Deploy with your real topology
+
+```bash
+export CLOUDFLARE_API_TOKEN=your-token
+PAGES_PROJECT=my-cf-topology make deploy
+```
+
+> ⚠️ **Static output contains your tunnel names, app domains, and policy details.** Do NOT deploy real topology data to a public site. Use a Cloudflare Access policy (see below) to keep it behind auth.
+
+### Custom domain
+
+Once a Pages project is deployed, point a domain at it:
+
+```bash
+# If your DNS is on Cloudflare (same account):
+npx wrangler pages deployment tail   # confirm project
+# Then in the dashboard: Pages → your project → Custom domains → Set up a custom domain
+# Enter e.g. topology.yourdomain.com — Cloudflare creates the CNAME automatically.
+
+# If DNS is elsewhere: add a CNAME record
+# topology.yourdomain.com  CNAME  YOUR-PROJECT.pages.dev
+```
+
+Cloudflare issues the TLS cert automatically (typically under a minute).
+
+### Protect the public URL with Cloudflare Access (recommended for real data)
+
+For a real-topology deploy you want behind auth:
+
+1. Cloudflare Zero Trust dashboard → **Access → Applications → Add an application → Self-hosted**
+2. Application domain: `topology.yourdomain.com`
+3. Add a policy: `Emails: [you@yourdomain.com]` → Action: Allow
+4. Save.
+
+Now only authenticated users can view the deployed topology.
 
 ---
 
