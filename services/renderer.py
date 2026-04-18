@@ -178,6 +178,23 @@ class TopologyRenderer:
         # Remove empty h1 tags that pyvis adds
         html_content = html_content.replace('<center>\n<h1></h1>\n</center>', '')
         html_content = html_content.replace('<center>\n          <h1></h1>\n        </center>', '')
+
+        # A11y + SEO + mobile: add lang, viewport, title, description, theme color.
+        # Pyvis emits a bare <html> and empty <title>, which breaks mobile rendering
+        # and leaves a blank browser tab.
+        html_content = html_content.replace('<html>', '<html lang="en">', 1)
+        meta_head = (
+            '<title>Cloudflare Zero Trust Topology</title>'
+            '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+            '<meta name="description" content="Interactive network topology for Cloudflare Zero Trust: tunnels, access apps, policies, identity providers, and private networks.">'
+            '<meta name="color-scheme" content="dark">'
+            '<meta name="theme-color" content="#1a1a2e">'
+        )
+        html_content = html_content.replace(
+            '<meta charset="utf-8">',
+            f'<meta charset="utf-8">{meta_head}',
+            1,
+        )
         
         # Remove Bootstrap (unused — custom CSS handles all styling)
         import re
@@ -340,7 +357,8 @@ class TopologyRenderer:
         }
         
         .filter-btn {
-            padding: var(--space-1) var(--space-2);
+            padding: var(--space-2) var(--space-3);
+            min-height: 32px;
             border: 1px solid var(--border-color);
             border-radius: var(--radius-inner);
             background: var(--bg-surface);
@@ -349,6 +367,9 @@ class TopologyRenderer:
             cursor: pointer;
             transition: all 0.2s ease-in-out;
             font-weight: 500;
+        }
+        @media (hover: none) and (pointer: coarse) {
+            .filter-btn { min-height: 44px; padding: var(--space-2) var(--space-3); }
         }
         
         .filter-btn:hover {
@@ -397,14 +418,28 @@ class TopologyRenderer:
             border: none;
             color: var(--text-secondary);
             cursor: pointer;
-            font-size: 18px;
-            padding: 0;
+            font-size: 20px;
             line-height: 1;
-            transition: color 0.2s;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            margin-left: auto;
+            transition: color 0.2s, background 0.2s;
         }
         
         .clear-btn:hover {
             color: var(--text-primary);
+            background: var(--bg-surface-hover);
+        }
+        .clear-btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        @media (hover: none) and (pointer: coarse) {
+            .clear-btn { width: 44px; height: 44px; font-size: 24px; }
         }
         
         /* Legend */
@@ -531,15 +566,16 @@ class TopologyRenderer:
         }
         
         .header-title {
-            font-size: 18px;
+            font-size: 20px;
             font-weight: 600;
             color: #fff;
             margin: 0;
+            letter-spacing: -0.01em;
         }
         
         .header-subtitle {
-            font-size: 11px;
-            color: #666;
+            font-size: 12px;
+            color: var(--text-secondary);
             margin: 0;
         }
         
@@ -652,10 +688,10 @@ class TopologyRenderer:
         buttons_html = '\n                '.join(filter_buttons)
         
         return f"""
-        <div class="search-container" id="searchContainer">
+        <aside class="search-container" id="searchContainer" aria-label="Search and filter nodes">
             <h3>
-                <span aria-hidden="true">🔍</span> Search & Filter
-                <button class="clear-btn" onclick="clearSearch()" aria-label="Clear search">×</button>
+                Search &amp; Filter
+                <button class="clear-btn" onclick="clearSearch()" aria-label="Clear search and close" type="button">&times;</button>
             </h3>
             <input 
                 type="text" 
@@ -669,7 +705,7 @@ class TopologyRenderer:
                 {buttons_html}
             </div>
             <div class="search-results" id="searchResults"></div>
-        </div>
+        </aside>
         """
     
     def _get_legend_html(self, node_counts: dict) -> str:
