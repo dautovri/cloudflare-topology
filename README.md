@@ -14,7 +14,9 @@ Generate interactive network topology visualizations for your Cloudflare Zero Tr
 
 ## 🎮 Try it online
 
-**[→ cloudflare-topology.pages.dev](https://cloudflare-topology.pages.dev)** — live demo with synthetic data, no login, no API token.
+**[→ topology.dautovri.com](https://topology.dautovri.com)** — live demo with synthetic data, no login, no API token.
+
+_Also reachable at [cloudflare-topology.pages.dev](https://cloudflare-topology.pages.dev)._
 
 Want it on your own Cloudflare account with real data? See **[Deploy your own](#-deploy-your-own)** below (~2 minutes).
 
