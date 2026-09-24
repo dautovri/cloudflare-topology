@@ -7,15 +7,6 @@ import re
 from typing import Dict, List, Set, Tuple, Optional, Any
 from dataclasses import dataclass, field
 
-_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
-
-
-def _display_label(name: str) -> str:
-    """Shorten bare UUIDs (no human name) to first 8 chars + ellipsis for readability."""
-    if name and _UUID_RE.match(name.strip()):
-        return name.strip()[:8] + "\u2026"
-    return name
-
 from config import NodeColors, NodeShapes
 from models.cloudflare_data import (
     CloudflareTopology,
@@ -28,8 +19,17 @@ from models.cloudflare_data import (
     VirtualNetwork,
     Route,
     IdentityProvider,
-    GatewayRule,
 )
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
+def _display_label(name: str) -> str:
+    """Shorten bare UUIDs (no human name) to first 8 chars + ellipsis for readability."""
+    if name and _UUID_RE.match(name.strip()):
+        return name.strip()[:8] + "\u2026"
+    return name
+
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +178,7 @@ class NetworkGraphBuilder:
     def _build_application_nodes(self, applications: List[AccessApplication]) -> None:
         """Build nodes for Access applications."""
         for app in applications:
-            tooltip_items = {
+            tooltip_items: Dict[str, Any] = {
                 "Domain": app.domain,
                 "Type": app.app_type,
                 "Session Duration": app.session_duration,

@@ -27,5 +27,11 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -v
 
-      - name: Lint
-        run: python -m py_compile main.py config.py services/cloudflare_api.py services/network_graph.py services/renderer.py server/server.py
+      - name: Compile check
+        run: python -m compileall -q .
+
+      - name: Lint with flake8
+        run: python -m flake8 . --max-line-length=120 --exclude=venv,__pycache__,build,dist,.git
+
+      - name: Type check with mypy
+        run: python -m mypy . --ignore-missing-imports

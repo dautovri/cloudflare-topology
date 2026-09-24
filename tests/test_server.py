@@ -1,9 +1,7 @@
 """Tests for the Flask server: /health, /regenerate, scheduler, and config parsing."""
 
 import importlib
-import os
 import sys
-import threading
 import time
 from pathlib import Path
 from unittest.mock import patch

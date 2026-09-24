@@ -22,3 +22,8 @@ beautifulsoup4>=4.12.0
 
 # Type hints
 typing-extensions>=4.9.0
+
+# Linting & Type Checking
+flake8>=7.0.0
+mypy>=1.8.0
+types-requests>=2.31.0

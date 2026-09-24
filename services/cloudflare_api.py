@@ -4,10 +4,14 @@ Cloudflare API client for fetching Zero Trust resources.
 
 import time
 import logging
+import threading
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 from config import Config, APIEndpoints, REQUEST_TIMEOUT, MAX_REQUESTS_PER_SECOND
 from models.cloudflare_data import (
@@ -47,7 +51,19 @@ class CloudflareAPIClient:
             "Authorization": f"Bearer {config.api_token}",
             "Content-Type": "application/json",
         })
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1.0,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "HEAD", "OPTIONS"],
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+
         self._last_request_time = 0.0
+        self._rate_limit_lock = threading.Lock()
         
         if not self.config.account_id:
             self.config.account_id = self._discover_account_id()
@@ -59,7 +75,7 @@ class CloudflareAPIClient:
         accounts = result.get("result", [])
         if not accounts:
             raise CloudflareAPIError("No accounts found for this API token")
-        account_id = accounts[0]["id"]
+        account_id = str(accounts[0]["id"])
         if len(accounts) == 1 or result.get("result_info", {}).get("total_count", 1) == 1:
             logger.info(f"Discovered account: {accounts[0].get('name', account_id)} ({account_id})")
         else:
@@ -72,12 +88,13 @@ class CloudflareAPIClient:
         return account_id
     
     def _rate_limit(self) -> None:
-        """Apply rate limiting between requests."""
+        """Apply rate limiting between requests (thread-safe)."""
         min_interval = 1.0 / MAX_REQUESTS_PER_SECOND
-        elapsed = time.time() - self._last_request_time
-        if elapsed < min_interval:
-            time.sleep(min_interval - elapsed)
-        self._last_request_time = time.time()
+        with self._rate_limit_lock:
+            elapsed = time.time() - self._last_request_time
+            if elapsed < min_interval:
+                time.sleep(min_interval - elapsed)
+            self._last_request_time = time.time()
     
     def _make_request(
         self,
@@ -103,8 +120,20 @@ class CloudflareAPIClient:
                 timeout=REQUEST_TIMEOUT,
             )
             
-            result = response.json()
+            try:
+                result = response.json()
+            except ValueError:
+                raise CloudflareAPIError(
+                    f"API request failed with status {response.status_code}: {response.text[:200]}",
+                    status_code=response.status_code,
+                )
             
+            if not isinstance(result, dict):
+                raise CloudflareAPIError(
+                    "API request returned unexpected non-dict JSON",
+                    status_code=response.status_code,
+                )
+
             if not result.get("success", False):
                 errors = result.get("errors", [])
                 error_messages = [e.get("message", "Unknown error") for e in errors]
@@ -430,7 +459,10 @@ class CloudflareAPIClient:
             
             # Check for next cursor
             result_info = result.get("result_info", {})
-            cursor = result_info.get("cursor")
+            cursors = result_info.get("cursors", {})
+            cursor = cursors.get("after") if isinstance(cursors, dict) else None
+            if not cursor:
+                cursor = result_info.get("cursor")
             
             if not cursor:
                 break
@@ -596,27 +628,36 @@ class CloudflareAPIClient:
         
         topology = CloudflareTopology(
             account_id=self.config.account_id,
-            fetched_at=datetime.utcnow().isoformat(),
+            fetched_at=datetime.now(timezone.utc).isoformat(),
         )
         
         # Fetch tunnels
         topology.tunnels = self._try_fetch("tunnels", self.list_tunnels)
         
-        # Fetch tunnel configs if requested
-        if include_tunnel_configs:
-            for tunnel in topology.tunnels:
-                if tunnel.remote_config:
-                    config = self.get_tunnel_config(tunnel.id)
-                    if config:
-                        tunnel.config = config
+        # Fetch tunnel configs concurrently if requested
+        if include_tunnel_configs and topology.tunnels:
+            tunnels_with_config = [t for t in topology.tunnels if t.remote_config]
+            if tunnels_with_config:
+                def _fetch_tunnel_config(t: Tunnel) -> None:
+                    cfg = self.get_tunnel_config(t.id)
+                    if cfg:
+                        t.config = cfg
+
+                max_workers = min(4, len(tunnels_with_config))
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    list(executor.map(_fetch_tunnel_config, tunnels_with_config))
         
         # Fetch applications
         topology.applications = self._try_fetch("applications", self.list_applications)
         
-        # Fetch app policies if requested
-        if include_app_policies:
-            for app in topology.applications:
+        # Fetch app policies concurrently if requested
+        if include_app_policies and topology.applications:
+            def _fetch_app_policies(app: AccessApplication) -> None:
                 app.policies = self.get_application_policies(app.id)
+
+            max_workers = min(4, len(topology.applications))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                list(executor.map(_fetch_app_policies, topology.applications))
         
         # Fetch reusable policies
         topology.policies = self._try_fetch("policies", self.list_policies)

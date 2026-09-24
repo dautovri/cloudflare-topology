@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import threading
+from typing import Dict, Any
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,7 +35,7 @@ REGEN_AUTH_TOKEN = os.environ.get("REGEN_AUTH_TOKEN", "")
 # _state_lock protects the state dict read by /health.
 _regen_lock = threading.Lock()
 _state_lock = threading.Lock()
-_state = {
+_state: Dict[str, Any] = {
     "regen_in_progress": False,
     "last_generated_at": None,       # ISO 8601 UTC or None
     "next_scheduled_regen_at": None,  # ISO 8601 UTC or None

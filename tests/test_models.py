@@ -1,6 +1,5 @@
 """Tests for data models."""
 
-import pytest
 from models.cloudflare_data import (
     Tunnel,
     TunnelConnection,
@@ -11,8 +10,6 @@ from models.cloudflare_data import (
     Device,
     VirtualNetwork,
     Route,
-    IdentityProvider,
-    GatewayRule,
     CloudflareTopology,
 )
 

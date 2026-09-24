@@ -6,7 +6,7 @@
 - [x] CSP blocks vis-network/bootstrap CDN resources — Fixed by /qa on main, 2026-04-16 (QA2-ISSUE-001)
 - [x] Add caching/TTL for topology data (15 min TTL, regenerate in background) — Shipped as scheduled regen in v0.2
 - [x] Atomic file writes for OUTPUT_FILE (write to temp, rename on success) — Shipped in v0.2 (renderer uses tempfile + os.replace)
-- [ ] Add CI/CD pipeline (.github/workflows/test.yml with pytest + mypy)
+- [x] Add CI/CD pipeline (.github/workflows/ci.yml with pytest + flake8 + mypy)
 - [x] Server version disclosure: Server header fully stripped via custom WSGIRequestHandler — Fixed by /qa on main, 2026-04-15 (ISSUE-008, was ISSUE-006)
 
 ## Features
@@ -19,7 +19,7 @@
 - [ ] Standardize CLI flags (--include-gateway → --no-gateway for consistency)
 - [ ] Add troubleshooting section to README
 - [ ] Add performance guidance in docs (large accounts, timeout tips)
-- [ ] Programmatic API: export classes from __init__.py for library use
+- [x] Programmatic API: export classes from __init__.py for library use
 - [ ] Config extensibility: CLI overrides for physics, colors, node sizes
 - [ ] Structured logging with request IDs
 
@@ -41,10 +41,10 @@
 - [x] Clear/legend buttons missing aria-label — Fixed (FINDING-005)
 - [x] Filter buttons missing aria-pressed — Fixed (FINDING-006)
 - [x] Viewport 100vh should be 100dvh — Fixed (FINDING-007)
-- [ ] Extract CSS colors into custom properties (FINDING-008, medium)
-- [ ] Spacing design tokens instead of magic numbers (FINDING-009, medium)
-- [ ] Add tablet responsive breakpoint (FINDING-010, medium)
-- [ ] Use rem/em instead of px for font sizes (FINDING-011, medium)
-- [ ] Extract CSS/JS from Python string literals to separate files (FINDING-012, medium)
-- [ ] Color-blind safe legend (text labels alongside swatches) (FINDING-013, low)
-- [ ] Differentiate APPLICATION vs ROUTE green hues for deuteranopia (FINDING-014, low)
+- [x] Extract CSS colors into custom properties (FINDING-008, medium)
+- [x] Spacing design tokens instead of magic numbers (FINDING-009, medium)
+- [x] Add tablet responsive breakpoint (FINDING-010, medium)
+- [x] Use rem/em instead of px for font sizes (FINDING-011, medium)
+- [x] Extract CSS/JS from Python string literals to separate files (FINDING-012, medium)
+- [x] Color-blind safe legend (text labels alongside swatches) (FINDING-013, low)
+- [x] Differentiate APPLICATION vs ROUTE green hues for deuteranopia (FINDING-014, low)

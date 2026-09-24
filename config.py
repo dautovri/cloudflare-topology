@@ -57,7 +57,7 @@ def _read_wrangler_token() -> Optional[str]:
                 token = data.get("oauth_token", "")
                 if token:
                     logger.info(f"Using OAuth token from wrangler config ({path})")
-                    return token
+                    return str(token)
             except Exception:
                 continue
     return None
@@ -73,7 +73,7 @@ class NodeColors:
     DEVICE: str = "#ef4444"       # Red
     VIRTUAL_NETWORK: str = "#a855f7"  # Purple
     IDENTITY_PROVIDER: str = "#06b6d4"  # Cyan
-    ROUTE: str = "#84cc16"        # Lime
+    ROUTE: str = "#0d9488"        # Teal (deuteranopia-safe contrast vs Application)
     
     # Policy decision colors
     ALLOW: str = "#22c55e"  # Green

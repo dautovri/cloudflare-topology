@@ -5,14 +5,15 @@ HTML renderer for Cloudflare topology visualization using Pyvis.
 import logging
 import json
 import os
+import shutil
 import tempfile
 from typing import Optional
 from pathlib import Path
 
 from pyvis.network import Network
 
-from config import Config, NodeColors, VALID_NODE_TYPES
-from services.network_graph import NetworkGraphBuilder, NodeMetadata, EdgeMetadata
+from config import Config, NodeColors
+from services.network_graph import NetworkGraphBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,8 @@ class TopologyRenderer:
         net = Network(
             height="100dvh",
             width="100%",
-            bgcolor="#1a1a2e",
-            font_color="#ffffff",
+            bgcolor="#0a0e17",
+            font_color="#f8fafc",
             directed=True,
             select_menu=False,
             filter_menu=False,
@@ -102,6 +103,18 @@ class TopologyRenderer:
             net.write_html(tmp_path, notebook=False, open_browser=False)
             self._inject_customizations(tmp_path, graph, node_counts)
             os.replace(tmp_path, output_path)
+
+            # Ensure vendored pyvis assets (lib/) exist in the target directory
+            # if output_path is placed in a subdirectory (e.g., _deploy/ or build/)
+            cwd_lib = Path.cwd() / "lib"
+            target_lib = target_dir / "lib"
+            if target_dir.resolve() != Path.cwd().resolve() and cwd_lib.is_dir():
+                try:
+                    if target_lib.exists():
+                        shutil.rmtree(target_lib)
+                    shutil.copytree(cwd_lib, target_lib)
+                except Exception as e:
+                    logger.debug(f"Could not copy lib/ to {target_lib}: {e}")
         except Exception:
             # Best-effort cleanup of temp file on failure
             try:
@@ -120,15 +133,17 @@ class TopologyRenderer:
                 "enabled": self.config.physics_enabled,
                 "stabilization": {
                     "enabled": self.config.physics_stabilization,
-                    "iterations": 100,
+                    "iterations": 120,
                     "updateInterval": 25,
+                    "fit": True,
                 },
                 "barnesHut": {
-                    "gravitationalConstant": -8000,
-                    "centralGravity": 0.3,
-                    "springLength": 150,
+                    "gravitationalConstant": -8500,
+                    "centralGravity": 0.25,
+                    "springLength": 160,
                     "springConstant": 0.04,
-                    "damping": 0.09,
+                    "damping": 0.12,
+                    "avoidOverlap": 0.35,
                 },
             },
             "interaction": {
@@ -139,30 +154,48 @@ class TopologyRenderer:
                 "dragNodes": True,
                 "dragView": True,
                 "zoomView": True,
-                "navigationButtons": True,
+                "navigationButtons": False,
                 "keyboard": {
-                    "enabled": True,
-                    "bindToWindow": True,
+                    "enabled": False,
                 },
+                "tooltipDelay": 150,
             },
             "nodes": {
                 "font": {
-                    "size": 14,
-                    "color": "#ffffff",
+                    "size": 13,
+                    "color": "#f8fafc",
+                    "face": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                    "strokeWidth": 3,
+                    "strokeColor": "#0a0e17",
                 },
                 "borderWidth": 2,
                 "borderWidthSelected": 4,
+                "shadow": {
+                    "enabled": True,
+                    "color": "rgba(0, 0, 0, 0.5)",
+                    "size": 8,
+                    "x": 0,
+                    "y": 3,
+                },
             },
             "edges": {
                 "font": {
                     "size": 11,
-                    "color": "#888888",
-                    "strokeWidth": 0,
-                    "background": "#1a1a2e",
+                    "color": "#94a3b8",
+                    "face": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                    "strokeWidth": 2,
+                    "strokeColor": "#0a0e17",
+                    "align": "middle",
                 },
                 "smooth": {
                     "enabled": True,
                     "type": "continuous",
+                },
+                "color": {
+                    "color": "#334155",
+                    "highlight": "#f6821f",
+                    "hover": "#60a5fa",
+                    "opacity": 0.8,
                 },
             },
         }
@@ -221,14 +254,23 @@ class TopologyRenderer:
         # Custom JavaScript
         custom_js = self._get_custom_js(node_data)
         
-        # Legend HTML (only show types that exist)
-        legend_html = self._get_legend_html(node_counts)
+        # Header HTML with branding and stats
+        header_html = self._get_header_html(node_counts, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         
         # Search box HTML (only show filter buttons for types that exist)
         search_html = self._get_search_html(node_counts)
-        
-        # Header HTML with branding and stats
-        header_html = self._get_header_html(node_counts, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+        # Legend HTML (only show types that exist)
+        legend_html = self._get_legend_html(node_counts)
+
+        # Inspector drawer HTML
+        inspector_html = self._get_inspector_html()
+
+        # Canvas toolbar dock HTML
+        toolbar_html = self._get_toolbar_html()
+
+        # Shortcuts modal & toast HTML
+        shortcuts_html = self._get_shortcuts_html()
         
         # Inject CSS before </head>
         html_content = html_content.replace(
@@ -239,7 +281,7 @@ class TopologyRenderer:
         # Inject HTML elements before the network div
         html_content = html_content.replace(
             '<div id="mynetwork"',
-            f'{header_html}{search_html}{legend_html}<div id="mynetwork"'
+            f'{header_html}{search_html}{legend_html}{inspector_html}{toolbar_html}{shortcuts_html}<div id="mynetwork"'
         )
         
         # Inject JavaScript before </body>
@@ -253,390 +295,10 @@ class TopologyRenderer:
     
     def _get_custom_css(self) -> str:
         """Get custom CSS for the visualization."""
-        return """
-        :root {
-            --bg-base: #1a1a2e;
-            --bg-surface: #16213e;
-            --bg-surface-hover: #1f2d50;
-            --bg-surface-alpha: rgba(22, 33, 62, 0.95);
-            --text-primary: #ffffff;
-            --text-secondary: #94a3b8;
-            --text-tertiary: #64748b;
-            --accent: #3b82f6;
-            --accent-hover: #60a5fa;
-            --border-color: #334155;
-            --border-hover: #475569;
-            
-            --space-1: 4px;
-            --space-2: 8px;
-            --space-3: 16px;
-            --space-4: 24px;
-            --radius: 8px;
-            --radius-inner: 6px;
-        }
-        
-        * {
-            box-sizing: border-box;
-        }
-        
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: var(--bg-base);
-            color: var(--text-primary);
-        }
-        
-        #mynetwork {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-        }
-        
-        /* Search Box */
-        .search-container {
-            position: fixed;
-            top: var(--space-4);
-            left: var(--space-4);
-            z-index: 1000;
-            background: var(--bg-surface-alpha);
-            padding: var(--space-3);
-            border-radius: var(--radius);
-            box-shadow: 0 var(--space-1) var(--space-4) rgba(0, 0, 0, 0.3);
-            min-width: 300px;
-            max-width: 400px;
-            cursor: move;
-            border: 1px solid var(--border-color);
-        }
-
-        .search-container :focus-visible,
-        .legend-container :focus-visible,
-        button:focus-visible {
-            outline: 2px solid var(--accent);
-            outline-offset: 2px;
-            border-radius: var(--radius-inner);
-        }
-        
-        .search-container h3 {
-            margin: 0 0 var(--space-3) 0;
-            font-size: 14px;
-            color: var(--text-secondary);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .search-input {
-            width: 100%;
-            padding: var(--space-2) var(--space-3);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius);
-            background: var(--bg-surface);
-            color: var(--text-primary);
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        
-        .search-input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 1px var(--accent);
-        }
-        
-        .search-input::placeholder {
-            color: var(--text-tertiary);
-        }
-        
-        .filter-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: var(--space-2);
-            margin-top: var(--space-3);
-        }
-        
-        .filter-btn {
-            padding: var(--space-2) var(--space-3);
-            min-height: 32px;
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-inner);
-            background: var(--bg-surface);
-            color: var(--text-secondary);
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
-            font-weight: 500;
-        }
-        @media (hover: none) and (pointer: coarse) {
-            .filter-btn { min-height: 44px; padding: var(--space-2) var(--space-3); }
-        }
-        
-        .filter-btn:hover {
-            border-color: var(--border-hover);
-            color: var(--text-primary);
-            background: var(--bg-surface-hover);
-        }
-        
-        .filter-btn.active {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: var(--text-primary);
-        }
-        
-        .search-results {
-            margin-top: var(--space-3);
-            max-height: 200px;
-            overflow-y: auto;
-            font-size: 13px;
-        }
-        
-        .search-result-item {
-            padding: var(--space-2) var(--space-3);
-            border-radius: var(--radius-inner);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
-            transition: background 0.2s;
-        }
-        
-        .search-result-item:hover {
-            background: var(--bg-surface-hover);
-        }
-        
-        .result-type {
-            padding: 2px var(--space-1);
-            border-radius: var(--space-1);
-            font-size: 10px;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-        
-        .clear-btn {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 20px;
-            line-height: 1;
-            width: 32px;
-            height: 32px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 6px;
-            margin-left: auto;
-            transition: color 0.2s, background 0.2s;
-        }
-        
-        .clear-btn:hover {
-            color: var(--text-primary);
-            background: var(--bg-surface-hover);
-        }
-        .clear-btn:focus-visible {
-            outline: 2px solid var(--accent);
-            outline-offset: 2px;
-        }
-        @media (hover: none) and (pointer: coarse) {
-            .clear-btn { width: 44px; height: 44px; font-size: 24px; }
-        }
-        
-        /* Legend */
-        .legend-container {
-            position: fixed;
-            bottom: var(--space-4);
-            right: var(--space-4);
-            z-index: 1000;
-            background: var(--bg-surface);
-            padding: var(--space-3);
-            border-radius: var(--radius);
-            box-shadow: 0 var(--space-1) var(--space-4) rgba(0, 0, 0, 0.45);
-            max-width: 200px;
-            border: 1px solid var(--border-color);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-        }
-        .legend-container:hover { opacity: 1; }
-        .legend-container { opacity: 0.96; transition: opacity 0.15s ease; }
-        
-        .legend-container h4 {
-            margin: 0 0 var(--space-3) 0;
-            font-size: 13px;
-            color: var(--text-secondary);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .legend-toggle {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 12px;
-            transition: color 0.2s;
-        }
-        
-        .legend-toggle:hover {
-            color: var(--text-primary);
-        }
-        
-        .legend-items {
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-2);
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
-            font-size: 13px;
-            color: var(--text-primary);
-        }
-        
-        .legend-color {
-            width: var(--space-3);
-            height: var(--space-3);
-            border-radius: var(--space-1);
-            flex-shrink: 0;
-        }
-        
-        .legend-hidden {
-            display: none;
-        }
-        
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: var(--space-2);
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: var(--bg-surface);
-            border-radius: var(--space-1);
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: var(--border-color);
-            border-radius: var(--space-1);
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--border-hover);
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: #333;
-            border-radius: 3px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: #444;
-        }
-        
-        /* Header */
-        .header-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1001;
-            background: linear-gradient(180deg, rgba(26, 26, 46, 0.98) 0%, rgba(26, 26, 46, 0.9) 80%, rgba(26, 26, 46, 0) 100%);
-            padding: 15px 20px 30px 20px;
-            pointer-events: none;
-        }
-        
-        .header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            pointer-events: auto;
-        }
-        
-        .header-brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        
-        .header-logo {
-            width: 32px;
-            height: 32px;
-        }
-        
-        .header-title {
-            font-size: 20px;
-            font-weight: 600;
-            color: #fff;
-            margin: 0;
-            letter-spacing: -0.01em;
-        }
-        
-        .header-subtitle {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin: 0;
-        }
-        
-        .header-stats {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-        }
-        
-        .stat-item {
-            text-align: center;
-        }
-        
-        .stat-value {
-            font-size: 20px;
-            font-weight: 700;
-            color: #fff;
-        }
-        
-        .stat-label {
-            font-size: 10px;
-            color: #666;
-            text-transform: uppercase;
-        }
-        
-        .header-timestamp {
-            font-size: 10px;
-            color: #555;
-        }
-        
-        /* Adjust search container position */
-        .search-container {
-            top: 80px !important;
-        }
-        
-        /* Mobile responsive */
-        @media (max-width: 768px) {
-            .search-container {
-                left: 10px;
-                right: 10px;
-                min-width: auto;
-                max-width: none;
-                top: 70px !important;
-            }
-            
-            .legend-container {
-                bottom: 10px;
-                right: 10px;
-                left: 10px;
-                max-width: none;
-            }
-            
-            .header-stats {
-                display: none;
-            }
-            
-            .header-container {
-                padding: 10px 15px 20px 15px;
-            }
-        }
-        """
+        css_file = Path(__file__).resolve().parent / "assets" / "style.css"
+        if css_file.is_file():
+            return css_file.read_text(encoding="utf-8")
+        return ""
     
     def _get_header_html(self, node_counts: dict, timestamp: str) -> str:
         """Get header HTML with branding and summary line."""
@@ -649,58 +311,92 @@ class TopologyRenderer:
         </svg>'''
 
         return f"""
-        <div class="header-container">
+        <header class="header-container">
             <div class="header-content">
                 <div class="header-brand">
                     {logo_svg}
-                    <div>
-                        <h1 class="header-title">Cloudflare Zero Trust Topology</h1>
-                        <p class="header-subtitle">{total_resources} resources &nbsp;·&nbsp; Updated {timestamp}</p>
+                    <div class="header-titles">
+                        <div class="header-title-row">
+                            <h1 class="header-title">Cloudflare Zero Trust Topology</h1>
+                            <span class="header-badge">v0.2</span>
+                        </div>
+                        <p class="header-subtitle">
+                            <span class="live-pulse" aria-hidden="true"></span>
+                            <span>{total_resources} resources</span>
+                            <span aria-hidden="true">&bull;</span>
+                            <span>Updated {timestamp}</span>
+                        </p>
                     </div>
                 </div>
+                <div class="header-actions">
+                    <button class="header-btn" onclick="fitGraphView()" title="Fit all nodes to view (F)" aria-label="Fit graph to view">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                        <span>Fit View</span>
+                        <span class="kbd-hint">F</span>
+                    </button>
+                    <button class="header-btn" id="physicsHeaderBtn" onclick="togglePhysics()" title="Pause/Resume layout physics (Space)" aria-label="Toggle layout physics">
+                        <svg id="physicsIconPause" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                        <span id="physicsStatusText">Pause</span>
+                        <span class="kbd-hint">Space</span>
+                    </button>
+                    <button class="header-btn" onclick="openShortcutsModal()" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <span class="kbd-hint">?</span>
+                    </button>
+                </div>
             </div>
-        </div>
+        </header>
         """
     
     def _get_search_html(self, node_counts: dict) -> str:
         """Get search box HTML with dynamic filter buttons."""
-        # Only show filter buttons for types that have data
-        filter_buttons = ['<button class="filter-btn active" data-type="all" role="button" aria-pressed="true" onclick="toggleFilter(\'all\')">All</button>']
+        filter_buttons = [
+            '<button class="filter-btn active" data-type="all" role="button" aria-pressed="true" onclick="toggleFilter(\'all\')">'
+            '<span class="filter-dot" style="background: var(--cf-orange);"></span>All</button>'
+        ]
         
-        type_labels = {
-            'tunnel': 'Tunnels',
-            'application': 'Apps', 
-            'policy': 'Policies',
-            'group': 'Groups',
-            'identity_provider': 'IdPs',
-            'virtual_network': 'VNets',
-            'route': 'Routes',
-            'device': 'Devices',
-        }
+        type_labels = [
+            ('tunnel', 'Tunnels', NodeColors.TUNNEL),
+            ('application', 'Apps', NodeColors.APPLICATION),
+            ('policy', 'Policies', NodeColors.POLICY),
+            ('group', 'Groups', NodeColors.GROUP),
+            ('identity_provider', 'IdPs', NodeColors.IDENTITY_PROVIDER),
+            ('virtual_network', 'VNets', NodeColors.VIRTUAL_NETWORK),
+            ('route', 'Routes', NodeColors.ROUTE),
+            ('device', 'Devices', NodeColors.DEVICE),
+        ]
         
-        for node_type, label in type_labels.items():
+        for node_type, label, color in type_labels:
             count = node_counts.get(node_type, 0)
             if count > 0:
                 filter_buttons.append(
-                    f'<button class="filter-btn" data-type="{node_type}" role="button" aria-pressed="false" onclick="toggleFilter(\'{node_type}\')">{label} ({count})</button>'
+                    f'<button class="filter-btn" data-type="{node_type}" role="button" aria-pressed="false" onclick="toggleFilter(\'{node_type}\')">'
+                    f'<span class="filter-dot" style="background: {color};"></span>{label} ({count})</button>'
                 )
         
         buttons_html = '\n                '.join(filter_buttons)
         
         return f"""
         <aside class="search-container" id="searchContainer" aria-label="Search and filter nodes">
-            <h3>
-                Search &amp; Filter
+            <div class="search-container-header">
+                <span class="search-container-title">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    Search &amp; Filter
+                </span>
+                <span style="font-size: 0.6875rem; color: var(--text-tertiary);">Drag to move</span>
+            </div>
+            <div class="search-input-wrapper">
+                <svg class="search-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input 
+                    type="text" 
+                    class="search-input" 
+                    id="searchInput" 
+                    aria-label="Search nodes by name, domain, or type"
+                    placeholder="Search name, domain, IP... (/)"
+                    onkeyup="performSearch(this.value)"
+                >
                 <button class="clear-btn" onclick="clearSearch()" aria-label="Clear search and close" type="button">&times;</button>
-            </h3>
-            <input 
-                type="text" 
-                class="search-input" 
-                id="searchInput" 
-                aria-label="Search nodes by name, domain, or type"
-                placeholder="Search by name, domain, type..."
-                onkeyup="performSearch(this.value)"
-            >
+            </div>
             <div class="filter-buttons" id="filterButtons">
                 {buttons_html}
             </div>
@@ -709,13 +405,24 @@ class TopologyRenderer:
         """
     
     def _get_legend_html(self, node_counts: dict) -> str:
-        """Get legend HTML showing only types that exist."""
+        """Get legend HTML showing only types that exist with shape indicators."""
+        shape_svgs = {
+            'tunnel': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><polygon points="12,2 22,7.5 22,18.5 12,24 2,18.5 2,7.5"/></svg>',
+            'application': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><circle cx="12" cy="12" r="9"/></svg>',
+            'policy': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><polygon points="12,3 22,21 2,21"/></svg>',
+            'group': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><circle cx="12" cy="12" r="7"/></svg>',
+            'identity_provider': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,21.5 12,18 5.5,21.5 7,14.5 2,9.5 9,9"/></svg>',
+            'virtual_network': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>',
+            'route': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><circle cx="12" cy="12" r="8"/></svg>',
+            'device': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><polygon points="12,2 22,12 12,22 2,12"/></svg>',
+        }
+        
         legend_items = [
             ('tunnel', NodeColors.TUNNEL, "Tunnel"),
             ('application', NodeColors.APPLICATION, "Application"),
             ('policy', NodeColors.POLICY, "Policy"),
             ('group', NodeColors.GROUP, "Group"),
-            ('identity_provider', NodeColors.IDENTITY_PROVIDER, "Identity Provider"),
+            ('identity_provider', NodeColors.IDENTITY_PROVIDER, "IdP"),
             ('virtual_network', NodeColors.VIRTUAL_NETWORK, "Virtual Network"),
             ('route', NodeColors.ROUTE, "Route"),
             ('device', NodeColors.DEVICE, "Device"),
@@ -725,289 +432,141 @@ class TopologyRenderer:
         for node_type, color, label in legend_items:
             count = node_counts.get(node_type, 0)
             if count > 0:
+                shape_icon = shape_svgs.get(node_type, shape_svgs['application'])(color)
                 items_html += f"""
                 <div class="legend-item">
-                    <div class="legend-color" style="background: {color};" role="img" aria-label="{label} color swatch"></div>
+                    {shape_icon}
                     <span>{label}</span>
-                    <span style="color: #555; margin-left: auto;">{count}</span>
+                    <span class="legend-item-count">{count}</span>
                 </div>
-            """
+                """
         
         if not items_html:
-            items_html = '<div class="legend-item" style="color: #666;">No resources found</div>'
+            items_html = '<div class="legend-item" style="color: var(--text-tertiary);">No resources found</div>'
         
         return f"""
         <div class="legend-container" id="legendContainer">
-            <h4>
-                <span>Legend</span>
+            <div class="legend-header">
+                <span class="legend-title">Legend</span>
                 <button class="legend-toggle" onclick="toggleLegend()" aria-label="Toggle legend visibility">Hide</button>
-            </h4>
+            </div>
             <div class="legend-items" id="legendItems">
                 {items_html}
             </div>
         </div>
         """
+
+    def _get_inspector_html(self) -> str:
+        """Get slide-out node details inspector HTML."""
+        return """
+        <aside class="inspector-drawer" id="inspectorDrawer" aria-label="Node Details">
+            <div class="inspector-header">
+                <div style="flex: 1; min-width: 0;">
+                    <div class="inspector-badge-row">
+                        <span class="inspector-type-badge" id="inspectorType">Resource</span>
+                        <span class="inspector-status-badge" id="inspectorStatus">Active</span>
+                    </div>
+                    <h2 class="inspector-title" id="inspectorTitle">Select a Node</h2>
+                </div>
+                <button class="inspector-close-btn" onclick="closeInspector()" aria-label="Close inspector panel">&times;</button>
+            </div>
+            <div class="inspector-body" id="inspectorBody">
+                <div class="inspector-section">
+                    <span class="inspector-section-title">Overview</span>
+                    <div class="inspector-card" id="inspectorOverview">
+                        <p style="color: var(--text-secondary); font-size: 0.8125rem;">Click on any node in the topology to inspect configuration, ingress rules, routes, and policies.</p>
+                    </div>
+                </div>
+                <div class="inspector-section" id="inspectorPropertiesSection">
+                    <span class="inspector-section-title">Properties</span>
+                    <div class="inspector-card" id="inspectorProperties"></div>
+                </div>
+            </div>
+            <div class="inspector-actions">
+                <button class="inspector-btn inspector-btn-primary" onclick="focusCurrentNode()" id="btnFocusNode">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h3m12 0h3M12 3v3m0 12v3"/></svg>
+                    Focus
+                </button>
+                <button class="inspector-btn inspector-btn-secondary" onclick="highlightCurrentNeighbors()" id="btnHighlightNeighbors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                    Neighbors
+                </button>
+                <button class="inspector-btn inspector-btn-secondary" onclick="copyCurrentNodeId()" id="btnCopyId" title="Copy Resource ID">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy ID
+                </button>
+            </div>
+        </aside>
+        """
+
+    def _get_toolbar_html(self) -> str:
+        """Get floating canvas toolbar dock HTML."""
+        return """
+        <nav class="canvas-toolbar" aria-label="Canvas controls">
+            <button class="toolbar-btn" onclick="zoomIn()" title="Zoom In (+)" aria-label="Zoom in">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            </button>
+            <button class="toolbar-btn" onclick="zoomOut()" title="Zoom Out (-)" aria-label="Zoom out">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            </button>
+            <button class="toolbar-btn" onclick="fitGraphView()" title="Fit to View (F)" aria-label="Fit graph">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </button>
+            <div class="toolbar-divider"></div>
+            <button class="toolbar-btn" id="toolbarPhysicsBtn" onclick="togglePhysics()" title="Toggle Physics (Space)" aria-label="Pause or resume physics">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            </button>
+            <button class="toolbar-btn" onclick="exportGraphPng()" title="Export PNG Snapshot (E)" aria-label="Export canvas snapshot as PNG">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </button>
+            <div class="toolbar-divider"></div>
+            <button class="toolbar-btn" onclick="toggleLegend()" title="Toggle Legend (L)" aria-label="Toggle legend">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </button>
+            <button class="toolbar-btn" onclick="openShortcutsModal()" title="Keyboard Shortcuts (?)" aria-label="Keyboard shortcuts">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></svg>
+            </button>
+        </nav>
+        """
+
+    def _get_shortcuts_html(self) -> str:
+        """Get keyboard shortcuts modal and toast notification HTML."""
+        return """
+        <div class="modal-backdrop" id="shortcutsModal" onclick="closeShortcutsModal(event)" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+            <div class="shortcuts-modal" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="shortcutsTitle">Keyboard Shortcuts</h3>
+                    <button class="inspector-close-btn" onclick="closeShortcutsModal()" aria-label="Close modal">&times;</button>
+                </div>
+                <div class="shortcuts-grid">
+                    <div class="shortcut-row"><span>Focus Search</span><span><kbd>/</kbd> or <kbd>⌘K</kbd></span></div>
+                    <div class="shortcut-row"><span>Fit View to Canvas</span><span><kbd>F</kbd></span></div>
+                    <div class="shortcut-row"><span>Pause / Resume Physics</span><span><kbd>Space</kbd></span></div>
+                    <div class="shortcut-row"><span>Export PNG Snapshot</span><span><kbd>E</kbd></span></div>
+                    <div class="shortcut-row"><span>Toggle Legend</span><span><kbd>L</kbd></span></div>
+                    <div class="shortcut-row"><span>Close Panel / Clear</span><span><kbd>Esc</kbd></span></div>
+                    <div class="shortcut-row"><span>Show Shortcuts Help</span><span><kbd>?</kbd></span></div>
+                </div>
+            </div>
+        </div>
+        <div class="toast-notification" id="toastNotification" role="status" aria-live="polite"></div>
+        """
     
     def _get_custom_js(self, node_data: list) -> str:
         """Get custom JavaScript for interactivity."""
         node_data_json = json.dumps(node_data)
-        
-        return f"""
-        // Node data for search
-        const nodeData = {node_data_json};
-        let activeFilter = 'all';
-        let selectedNodes = new Set();
-        
-        // Wait for network to be ready
-        document.addEventListener('DOMContentLoaded', function() {{
-            initializeSearch();
-            initializeDragFunctionality();
-        }});
-        
-        function initializeSearch() {{
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) {{
-                searchInput.focus();
-            }}
-        }}
-        
-        function performSearch(query) {{
-            const resultsContainer = document.getElementById('searchResults');
-            if (!resultsContainer) return;
-            
-            query = query.toLowerCase().trim();
-            
-            if (!query && activeFilter === 'all') {{
-                resultsContainer.innerHTML = '';
-                resetHighlighting();
-                return;
-            }}
-            
-            // Filter nodes
-            let results = nodeData.filter(node => {{
-                // Apply type filter
-                if (activeFilter !== 'all' && node.type !== activeFilter) {{
-                    return false;
-                }}
-                
-                // If no search query, match all nodes of the active filter type
-                if (!query) return true;
-                
-                // Search in label
-                if (node.label.toLowerCase().includes(query)) return true;
-                
-                // Search in type
-                if (node.type.toLowerCase().includes(query)) return true;
-                
-                // Search in properties
-                for (const [key, value] of Object.entries(node.properties || {{}})) {{
-                    if (typeof value === 'string' && value.toLowerCase().includes(query)) return true;
-                    if (Array.isArray(value) && value.some(v => String(v).toLowerCase().includes(query))) return true;
-                }}
-                
-                return false;
-            }});
-            
-            // Limit results
-            results = results.slice(0, 20);
-            
-            // Render results
-            if (results.length === 0) {{
-                resultsContainer.innerHTML = '<div style="color: #666; padding: 10px;">No results found</div>';
-            }} else {{
-                resultsContainer.innerHTML = results.map(node => `
-                    <div class="search-result-item" onclick="selectNode('${{node.id}}')">
-                        <span class="result-type" style="background: ${{getTypeColor(node.type)}}">
-                            ${{node.type}}
-                        </span>
-                        <span>${{highlightMatch(node.label, query)}}</span>
-                    </div>
-                `).join('');
-            }}
-            
-            // Highlight matching nodes in graph
-            highlightNodes(results.map(n => n.id));
-        }}
-        
-        function getTypeColor(type) {{
-            const colors = {{
-                tunnel: '{NodeColors.TUNNEL}',
-                application: '{NodeColors.APPLICATION}',
-                policy: '{NodeColors.POLICY}',
-                group: '{NodeColors.GROUP}',
-                device: '{NodeColors.DEVICE}',
-                virtual_network: '{NodeColors.VIRTUAL_NETWORK}',
-                identity_provider: '{NodeColors.IDENTITY_PROVIDER}',
-                route: '{NodeColors.ROUTE}',
-            }};
-            return colors[type] || '#6b7280';
-        }}
-        
-        function highlightMatch(text, query) {{
-            if (!query) return text;
-            const regex = new RegExp(`(${{query}})`, 'gi');
-            return text.replace(regex, '<strong style="color: #3b82f6;">$1</strong>');
-        }}
-        
-        function toggleFilter(type) {{
-            activeFilter = type;
-            
-            // Update button states
-            document.querySelectorAll('.filter-btn').forEach(btn => {{
-                const isActive = btn.dataset.type === type;
-                btn.classList.toggle('active', isActive);
-                btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-            }});
-            
-            // Apply filter (works with or without search text)
-            const searchInput = document.getElementById('searchInput');
-            performSearch(searchInput ? searchInput.value : '');
-        }}
-        
-        function selectNode(nodeId) {{
-            if (typeof network !== 'undefined') {{
-                network.selectNodes([nodeId]);
-                network.focus(nodeId, {{
-                    scale: 1.5,
-                    animation: {{
-                        duration: 500,
-                        easingFunction: 'easeInOutQuad'
-                    }}
-                }});
-            }}
-        }}
-        
-        function highlightNodes(nodeIds) {{
-            if (typeof network !== 'undefined') {{
-                // Get all node IDs
-                const allNodes = network.body.data.nodes.getIds();
-                const allEdges = network.body.data.edges.getIds();
-                
-                if (nodeIds.length === 0) {{
-                    resetHighlighting();
-                    return;
-                }}
-                
-                // Dim non-matching nodes
-                const nodeUpdates = allNodes.map(id => {{
-                    const isMatch = nodeIds.includes(id);
-                    return {{
-                        id: id,
-                        opacity: isMatch ? 1 : 0.2,
-                    }};
-                }});
-                
-                // Dim all edges
-                const edgeUpdates = allEdges.map(id => ({{
-                    id: id,
-                    color: {{ opacity: 0.2 }},
-                }}));
-                
-                network.body.data.nodes.update(nodeUpdates);
-                network.body.data.edges.update(edgeUpdates);
-            }}
-        }}
-        
-        function resetHighlighting() {{
-            if (typeof network !== 'undefined') {{
-                const allNodes = network.body.data.nodes.getIds();
-                const allEdges = network.body.data.edges.getIds();
-                
-                const nodeUpdates = allNodes.map(id => ({{
-                    id: id,
-                    opacity: 1,
-                }}));
-                
-                const edgeUpdates = allEdges.map(id => ({{
-                    id: id,
-                    color: {{ opacity: 1 }},
-                }}));
-                
-                network.body.data.nodes.update(nodeUpdates);
-                network.body.data.edges.update(edgeUpdates);
-            }}
-        }}
-        
-        function clearSearch() {{
-            const searchInput = document.getElementById('searchInput');
-            const resultsContainer = document.getElementById('searchResults');
-            
-            if (searchInput) searchInput.value = '';
-            if (resultsContainer) resultsContainer.innerHTML = '';
-            
-            resetHighlighting();
-            
-            if (typeof network !== 'undefined') {{
-                network.unselectAll();
-            }}
-        }}
-        
-        function toggleLegend() {{
-            const legendItems = document.getElementById('legendItems');
-            const toggleBtn = document.querySelector('.legend-toggle');
-            
-            if (legendItems.classList.contains('legend-hidden')) {{
-                legendItems.classList.remove('legend-hidden');
-                toggleBtn.textContent = 'Hide';
-            }} else {{
-                legendItems.classList.add('legend-hidden');
-                toggleBtn.textContent = 'Show';
-            }}
-        }}
-        
-        function initializeDragFunctionality() {{
-            const container = document.getElementById('searchContainer');
-            if (!container) return;
-            
-            let isDragging = false;
-            let offsetX, offsetY;
-            
-            container.addEventListener('mousedown', function(e) {{
-                if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
-                
-                isDragging = true;
-                offsetX = e.clientX - container.offsetLeft;
-                offsetY = e.clientY - container.offsetTop;
-                container.style.cursor = 'grabbing';
-            }});
-            
-            document.addEventListener('mousemove', function(e) {{
-                if (!isDragging) return;
-                
-                container.style.left = (e.clientX - offsetX) + 'px';
-                container.style.top = (e.clientY - offsetY) + 'px';
-                container.style.right = 'auto';
-            }});
-            
-            document.addEventListener('mouseup', function() {{
-                isDragging = false;
-                container.style.cursor = 'move';
-            }});
-        }}
-        
-        // Neighbourhood highlight on click
-        if (typeof network !== 'undefined') {{
-            network.on('click', function(params) {{
-                if (params.nodes.length > 0) {{
-                    const nodeId = params.nodes[0];
-                    const connectedNodes = network.getConnectedNodes(nodeId);
-                    const connectedEdges = network.getConnectedEdges(nodeId);
-                    
-                    // Highlight selected node and connected nodes
-                    const highlightIds = [nodeId, ...connectedNodes];
-                    highlightNodes(highlightIds);
-                }} else {{
-                    resetHighlighting();
-                }}
-            }});
-            
-            network.on('doubleClick', function(params) {{
-                if (params.nodes.length > 0) {{
-                    network.focus(params.nodes[0], {{
-                        scale: 1.5,
-                        animation: true
-                    }});
-                }}
-            }});
-        }}
-        """
+        colors_json = json.dumps({
+            "tunnel": NodeColors.TUNNEL,
+            "application": NodeColors.APPLICATION,
+            "policy": NodeColors.POLICY,
+            "group": NodeColors.GROUP,
+            "device": NodeColors.DEVICE,
+            "virtual_network": NodeColors.VIRTUAL_NETWORK,
+            "identity_provider": NodeColors.IDENTITY_PROVIDER,
+            "route": NodeColors.ROUTE,
+        })
+        js_file = Path(__file__).resolve().parent / "assets" / "topology.js"
+        if js_file.is_file():
+            content = js_file.read_text(encoding="utf-8")
+            return content.replace("__NODE_DATA__", node_data_json).replace("__NODE_COLORS__", colors_json)
+        return f"const nodeData = {node_data_json};"

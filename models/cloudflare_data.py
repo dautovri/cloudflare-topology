@@ -4,7 +4,6 @@ Data models for Cloudflare Zero Trust resources.
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 
 
 @dataclass
@@ -25,6 +24,11 @@ class TunnelConfig:
     ingress: List[Dict[str, Any]] = field(default_factory=list)
     warp_routing: Optional[Dict[str, Any]] = None
     origin_request: Optional[Dict[str, Any]] = None
+
+    @property
+    def ingress_rules(self) -> List[Dict[str, Any]]:
+        """Convenience alias for ingress rules."""
+        return self.ingress
 
 
 @dataclass

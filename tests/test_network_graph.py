@@ -1,7 +1,6 @@
 """Tests for network graph builder."""
 
 import pytest
-from unittest.mock import MagicMock
 
 from services.network_graph import NetworkGraphBuilder, NodeMetadata, EdgeMetadata
 from models.cloudflare_data import (
@@ -12,11 +11,9 @@ from models.cloudflare_data import (
     AccessPolicy,
     PolicyRule,
     AccessGroup,
-    Device,
     VirtualNetwork,
     Route,
     IdentityProvider,
-    GatewayRule,
     CloudflareTopology,
 )
 from config import NodeColors, NodeShapes
