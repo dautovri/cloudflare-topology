@@ -8,30 +8,35 @@
 - [x] Atomic file writes for OUTPUT_FILE (write to temp, rename on success) — Shipped in v0.2 (renderer uses tempfile + os.replace)
 - [x] Add CI/CD pipeline (.github/workflows/ci.yml with pytest + flake8 + mypy)
 - [x] Server version disclosure: Server header fully stripped via custom WSGIRequestHandler — Fixed by /qa on main, 2026-04-15 (ISSUE-008, was ISSUE-006)
+- [x] HTML/XSS escaping in graph tooltips (`services/network_graph.py`) and search/inspector DOM (`services/assets/topology.js`) — Shipped in v0.3
 
 ## Features
-- [ ] JSON export mode (enable Terraform/Ansible/compliance integrations)
-- [ ] Multi-account support (aggregate multiple CF accounts)
-- [ ] Config file support (--config topology.json)
+- [x] Cloudflare MCP transport (`--source mcp` / `ZeroTrustMCPSource` over `https://mcp.cloudflare.com/mcp` Code Mode + `TopologySource` abstraction)
+- [x] JSON export mode (`--export-json FILE`, `CloudflareTopology.to_dict()`, `NetworkGraphBuilder.to_dict()`, plus UI `J` JSON download)
+- [x] Gateway rule graph nodes & domain-matching edges (`--include-gateway`)
+- [x] Multi-account support (`--account-id` repeatable/comma-separated + `CloudflareTopology.merge()`)
+- [x] Config file support (`--config topology.json` / `.toml` via `Config.from_file()`)
 
 ## DX Improvements
 - [x] Add .env.example and python-dotenv support
-- [ ] Standardize CLI flags (--include-gateway → --no-gateway for consistency)
-- [ ] Add troubleshooting section to README
-- [ ] Add performance guidance in docs (large accounts, timeout tips)
+- [x] Standardize CLI flags (`--no-gateway` alongside `--include-gateway`, `--no-physics`)
+- [x] Add troubleshooting section to README
+- [x] Add performance guidance in docs (large accounts, timeout tips)
 - [x] Programmatic API: export classes from __init__.py for library use
-- [ ] Config extensibility: CLI overrides for physics, colors, node sizes
-- [ ] Structured logging with request IDs
+- [x] Config extensibility: CLI & config file overrides for physics, node sizes, accounts
+- [x] Structured logging with request IDs (`X-Request-Id` middleware in `server/server.py`)
 
 ## Code Quality
 - [x] Remove dead isinstance branch in main.py node_counts — Fixed by /qa on main, 2026-04-15 (ISSUE-007)
 - [x] lib/bindings/utils.js 404 via Flask — Fixed, added /lib/ route, /qa 2026-04-16 (QA2-ISSUE-002)
 - [x] Unused Bootstrap in pyvis output — Fixed, stripped in renderer, /qa 2026-04-16 (QA2-ISSUE-003)
+- [x] Zero flake8 & mypy issues across entire codebase; `.dockerignore` and slimmed Alpine `Dockerfile`; `!/lib/` un-ignored in `.gitignore` — Shipped in v0.3
 
 ## UX (from /qa, 2026-04-16)
 - [x] Filter buttons do nothing without search text — Fixed in performSearch, /qa 2026-04-16 (QA2-ISSUE-004)
 - [x] Duplicate stats panel overlapping header — Fixed, removed updateStats, /qa 2026-04-16 (QA2-ISSUE-005)
-- [ ] IdP node shows UUID instead of name — Data issue from Cloudflare API (deferred)
+- [x] IdP node shows UUID instead of name — Formatted with IdP type prefix + shortened UUID (`_build_identity_provider_nodes`)
+- [x] Connected Resources navigation in Inspector Drawer, Hierarchical Flow layout (`H`), Connected Only & Health quick filters, and clickable Legend items — Shipped in v0.3
 
 ## Design (from /design-review, 2026-04-15)
 - [x] 503 error page was raw JSON — Fixed, styled dark theme error page (FINDING-001)

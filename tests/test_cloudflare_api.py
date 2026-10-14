@@ -34,7 +34,7 @@ class TestCloudflareAPIClientInit:
     def test_auto_discover_account_id_single(self):
         """Test auto-discovering account ID when not provided."""
         config = Config(api_token="test-token", account_id="")
-        
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -50,7 +50,7 @@ class TestCloudflareAPIClientInit:
     def test_auto_discover_account_id_multiple(self):
         """Test auto-discovering account ID with warning when multiple accounts exist."""
         config = Config(api_token="test-token", account_id="")
-        
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -69,7 +69,7 @@ class TestCloudflareAPIClientInit:
     def test_auto_discover_account_id_none_found(self):
         """Test error raised when no accounts are found."""
         config = Config(api_token="test-token", account_id="")
-        
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -89,7 +89,7 @@ class TestCloudflareAPIClientRequests:
     def test_make_request_success(self, mock_config):
         """Test successful API request."""
         client = CloudflareAPIClient(mock_config)
-        
+
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -105,7 +105,7 @@ class TestCloudflareAPIClientRequests:
     def test_make_request_api_error(self, mock_config):
         """Test API error response raises CloudflareAPIError."""
         client = CloudflareAPIClient(mock_config)
-        
+
         mock_resp = MagicMock()
         mock_resp.status_code = 400
         mock_resp.json.return_value = {
@@ -123,7 +123,7 @@ class TestCloudflareAPIClientRequests:
     def test_make_request_non_json_response(self, mock_config):
         """Test handling of non-JSON response (e.g. 502 HTML)."""
         client = CloudflareAPIClient(mock_config)
-        
+
         mock_resp = MagicMock()
         mock_resp.status_code = 502
         mock_resp.text = "Bad Gateway HTML error page"
@@ -232,7 +232,7 @@ class TestCloudflareAPIClientResources:
     def test_list_tunnels(self, mock_config):
         """Test fetching and parsing tunnels."""
         client = CloudflareAPIClient(mock_config)
-        
+
         mock_tunnels = [
             {
                 "id": "tun-1",
@@ -264,7 +264,7 @@ class TestCloudflareAPIClientResources:
     def test_get_tunnel_config(self, mock_config):
         """Test fetching and parsing tunnel config ingress rules."""
         client = CloudflareAPIClient(mock_config)
-        
+
         mock_data = {
             "success": True,
             "result": {
@@ -286,7 +286,7 @@ class TestCloudflareAPIClientResources:
     def test_list_applications(self, mock_config):
         """Test fetching and parsing access applications."""
         client = CloudflareAPIClient(mock_config)
-        
+
         mock_apps = [
             {
                 "id": "app-1",
@@ -324,7 +324,7 @@ class TestCloudflareAPIClientResources:
              patch.object(client, "list_virtual_networks", return_value=[]), \
              patch.object(client, "list_routes", return_value=[]), \
              patch.object(client, "list_devices", return_value=[]):
-            
+
             topology = client.fetch_topology(
                 include_tunnel_configs=True,
                 include_app_policies=True,

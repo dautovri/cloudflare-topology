@@ -2,6 +2,9 @@
 
 const nodeData = __NODE_DATA__;
 let activeFilter = 'all';
+let connectedOnly = false;
+let statusFilter = null; // null | 'healthy' | 'unhealthy'
+let hierarchicalEnabled = false;
 let selectedNodeId = null;
 let physicsEnabled = true;
 
@@ -31,23 +34,40 @@ function initializeSearch() {
 function performSearch(query) {
     const resultsContainer = document.getElementById('searchResults');
     if (!resultsContainer) return;
-    
+
     query = (query || '').toLowerCase().trim();
-    
-    if (!query && activeFilter === 'all') {
+
+    if (!query && activeFilter === 'all' && !connectedOnly && !statusFilter) {
         resultsContainer.innerHTML = '';
         if (!selectedNodeId) {
             resetHighlighting();
         }
         return;
     }
-    
+
     const results = nodeData.filter(node => {
         // Filter by category
         if (activeFilter !== 'all' && node.type !== activeFilter) {
             return false;
         }
-        
+
+        // Filter by connected nodes only
+        if (connectedOnly && typeof network !== 'undefined') {
+            const deg = (network.getConnectedNodes(node.id) || []).length;
+            if (deg === 0) return false;
+        }
+
+        // Filter by health / status
+        if (statusFilter) {
+            const st = String((node.properties && (node.properties.status || node.properties.decision)) || '').toLowerCase();
+            if (statusFilter === 'healthy') {
+                if (st && st !== 'healthy' && st !== 'allow') return false;
+                if (!st && node.type === 'tunnel') return false;
+            } else if (statusFilter === 'unhealthy') {
+                if (!['inactive', 'down', 'degraded', 'deny', 'block'].includes(st)) return false;
+            }
+        }
+
         if (!query) return true;
         
         // Match label
@@ -71,14 +91,15 @@ function performSearch(query) {
         resultsContainer.innerHTML = '<div style="color: var(--text-tertiary); padding: 10px; text-align: center;">No matching resources found</div>';
     } else {
         resultsContainer.innerHTML = displayResults.map(node => {
-            const color = getTypeColor(node.type);
+            const color = escapeHtml(getTypeColor(node.type));
             const highlighted = highlightMatch(node.label, query);
-            const subtitle = getNodeSubtitle(node);
-            
+            const subtitle = escapeHtml(getNodeSubtitle(node));
+            const safeIdAttr = escapeHtml(String(node.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+
             return `
-                <div class="search-result-item" onclick="selectAndFocusNode('${node.id}')" role="button" tabindex="0">
+                <div class="search-result-item" onclick="selectAndFocusNode('${safeIdAttr}')" role="button" tabindex="0">
                     <span class="result-type" style="background: ${color}">
-                        ${formatTypeLabel(node.type)}
+                        ${escapeHtml(formatTypeLabel(node.type))}
                     </span>
                     <div style="flex: 1; min-width: 0;">
                         <div class="result-label">${highlighted}</div>
@@ -112,6 +133,7 @@ function formatTypeLabel(type) {
         virtual_network: 'VNet',
         identity_provider: 'IdP',
         route: 'Route',
+        gateway_rule: 'Gateway',
     };
     return labels[type] || type;
 }
@@ -121,10 +143,21 @@ function getTypeColor(type) {
     return colors[type] || '#64748b';
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function highlightMatch(text, query) {
-    if (!query || !text) return text || '';
-    const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
-    return text.replace(regex, '<strong style="color: var(--cf-orange); font-weight: 700;">$1</strong>');
+    const safeText = escapeHtml(text || '');
+    if (!query || !text) return safeText;
+    const safeQuery = escapeHtml(query);
+    const regex = new RegExp(`(${escapeRegex(safeQuery)})`, 'gi');
+    return safeText.replace(regex, '<strong style="color: var(--cf-orange); font-weight: 700;">$1</strong>');
 }
 
 function escapeRegex(string) {
@@ -132,14 +165,47 @@ function escapeRegex(string) {
 }
 
 function toggleFilter(type) {
-    activeFilter = type;
-    
+    if (activeFilter === type && type !== 'all') {
+        activeFilter = 'all';
+    } else {
+        activeFilter = type;
+    }
+
     document.querySelectorAll('.filter-btn').forEach(btn => {
-        const isActive = btn.dataset.type === type;
+        const isActive = btn.dataset.type === activeFilter;
         btn.classList.toggle('active', isActive);
         btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
-    
+
+    const searchInput = document.getElementById('searchInput');
+    performSearch(searchInput ? searchInput.value : '');
+}
+
+function toggleConnectedOnly() {
+    connectedOnly = !connectedOnly;
+    const btn = document.getElementById('connectedOnlyBtn');
+    if (btn) {
+        btn.classList.toggle('active', connectedOnly);
+        btn.setAttribute('aria-pressed', connectedOnly ? 'true' : 'false');
+    }
+    const searchInput = document.getElementById('searchInput');
+    performSearch(searchInput ? searchInput.value : '');
+}
+
+function toggleStatusFilter(mode) {
+    statusFilter = statusFilter === mode ? null : mode;
+    const healthyBtn = document.getElementById('healthyOnlyBtn');
+    const unhealthyBtn = document.getElementById('unhealthyOnlyBtn');
+    if (healthyBtn) {
+        const isH = statusFilter === 'healthy';
+        healthyBtn.classList.toggle('active', isH);
+        healthyBtn.setAttribute('aria-pressed', isH ? 'true' : 'false');
+    }
+    if (unhealthyBtn) {
+        const isU = statusFilter === 'unhealthy';
+        unhealthyBtn.classList.toggle('active', isU);
+        unhealthyBtn.setAttribute('aria-pressed', isU ? 'true' : 'false');
+    }
     const searchInput = document.getElementById('searchInput');
     performSearch(searchInput ? searchInput.value : '');
 }
@@ -147,10 +213,20 @@ function toggleFilter(type) {
 function clearSearch() {
     const searchInput = document.getElementById('searchInput');
     const resultsContainer = document.getElementById('searchResults');
-    
+
     if (searchInput) searchInput.value = '';
     if (resultsContainer) resultsContainer.innerHTML = '';
-    
+
+    connectedOnly = false;
+    statusFilter = null;
+    ['connectedOnlyBtn', 'healthyOnlyBtn', 'unhealthyOnlyBtn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove('active');
+            el.setAttribute('aria-pressed', 'false');
+        }
+    });
+
     if (!selectedNodeId) {
         resetHighlighting();
         if (typeof network !== 'undefined') {
@@ -212,37 +288,43 @@ function openInspector(nodeId) {
     
     // Overview details
     if (overviewEl) {
+        const safeId = escapeHtml(node.id);
+        const safeType = escapeHtml(node.type);
         let detailsHtml = `
             <div class="inspector-property-row">
                 <span class="inspector-prop-key">Resource ID</span>
-                <span class="inspector-prop-val" title="${node.id}">${node.id}</span>
+                <span class="inspector-prop-val" title="${safeId}">${safeId}</span>
             </div>
             <div class="inspector-property-row">
                 <span class="inspector-prop-key">Type</span>
-                <span class="inspector-prop-val">${node.type}</span>
+                <span class="inspector-prop-val">${safeType}</span>
             </div>
         `;
-        
+
         if (props.domain) {
+            const safeDomain = escapeHtml(props.domain);
             detailsHtml += `
                 <div class="inspector-property-row">
                     <span class="inspector-prop-key">Domain</span>
-                    <span class="inspector-prop-val" title="${props.domain}">${props.domain}</span>
+                    <span class="inspector-prop-val" title="${safeDomain}">${safeDomain}</span>
                 </div>
             `;
         }
-        
+
         if (props.network) {
+            const safeNetwork = escapeHtml(props.network);
             detailsHtml += `
                 <div class="inspector-property-row">
                     <span class="inspector-prop-key">Network CIDR</span>
-                    <span class="inspector-prop-val">${props.network}</span>
+                    <span class="inspector-prop-val">${safeNetwork}</span>
                 </div>
             `;
         }
-        
+
         if (props.ingress_rules && Array.isArray(props.ingress_rules)) {
-            const rulesSummary = props.ingress_rules.filter(r => r.hostname).map(r => r.hostname).join(', ') || 'Default';
+            const rulesSummary = escapeHtml(
+                props.ingress_rules.filter(r => r.hostname).map(r => r.hostname).join(', ') || 'Default'
+            );
             detailsHtml += `
                 <div class="inspector-property-row">
                     <span class="inspector-prop-key">Ingress Hosts</span>
@@ -250,22 +332,76 @@ function openInspector(nodeId) {
                 </div>
             `;
         }
-        
+
         overviewEl.innerHTML = detailsHtml;
     }
-    
+
+    // Connected Resources Section
+    const connSectionEl = document.getElementById('inspectorConnectionsSection');
+    const connTitleEl = document.getElementById('inspectorConnectionsTitle');
+    const connListEl = document.getElementById('inspectorConnections');
+    if (connSectionEl && connListEl && typeof network !== 'undefined') {
+        const neighborIds = network.getConnectedNodes(nodeId) || [];
+        if (neighborIds.length === 0) {
+            connSectionEl.style.display = 'none';
+            connListEl.innerHTML = '';
+        } else {
+            connSectionEl.style.display = 'flex';
+            if (connTitleEl) {
+                connTitleEl.textContent = `Connected Resources (${neighborIds.length})`;
+            }
+            connListEl.innerHTML = neighborIds.map(nId => {
+                const neighbor = nodeMap.get(nId) || { id: nId, label: nId, type: 'resource' };
+                const nColor = escapeHtml(getTypeColor(neighbor.type));
+                const nType = escapeHtml(formatTypeLabel(neighbor.type));
+                const nLabel = escapeHtml(neighbor.label || neighbor.id);
+                const safeNIdAttr = escapeHtml(String(neighbor.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+                return `
+                    <button type="button" class="inspector-conn-item" onclick="selectAndFocusNode('${safeNIdAttr}')">
+                        <span class="result-type" style="background: ${nColor}">${nType}</span>
+                        <span class="inspector-conn-label" title="${nLabel}">${nLabel}</span>
+                        <span class="inspector-conn-arrow">&rarr;</span>
+                    </button>
+                `;
+            }).join('');
+        }
+    }
+
     // Key/Value Properties Table
     if (propsEl) {
-        const entries = Object.entries(props).filter(([k]) => k !== 'status');
+        const entries = Object.entries(props).filter(([k, v]) => (
+            k !== 'status' &&
+            k !== 'ingress_rules' &&
+            v !== null &&
+            v !== undefined &&
+            v !== '' &&
+            !(Array.isArray(v) && v.length === 0)
+        ));
         if (entries.length === 0) {
             propsEl.innerHTML = '<span style="color: var(--text-tertiary);">No additional properties</span>';
         } else {
             propsEl.innerHTML = entries.map(([key, val]) => {
-                let displayVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+                const safeKey = escapeHtml(formatPropKey(key));
+                if (Array.isArray(val)) {
+                    const tagsHtml = val.slice(0, 12).map(item => {
+                        const text = typeof item === 'object' ? JSON.stringify(item) : String(item);
+                        const safeItem = escapeHtml(text);
+                        return `<span class="inspector-tag" title="${safeItem}">${safeItem}</span>`;
+                    }).join('');
+                    const moreCount = val.length > 12 ? `<span class="inspector-tag">+${val.length - 12} more</span>` : '';
+                    return `
+                        <div class="inspector-property-row inspector-property-row-stacked">
+                            <span class="inspector-prop-key">${safeKey}</span>
+                            <div class="inspector-tag-list">${tagsHtml}${moreCount}</div>
+                        </div>
+                    `;
+                }
+                const rawVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+                const safeVal = escapeHtml(rawVal);
                 return `
                     <div class="inspector-property-row">
-                        <span class="inspector-prop-key">${formatPropKey(key)}</span>
-                        <span class="inspector-prop-val" title="${displayVal}">${displayVal}</span>
+                        <span class="inspector-prop-key">${safeKey}</span>
+                        <span class="inspector-prop-val" title="${safeVal}">${safeVal}</span>
                     </div>
                 `;
             }).join('');
@@ -442,13 +578,13 @@ function togglePhysics() {
 
 function exportGraphPng() {
     if (typeof network === 'undefined') return;
-    
+
     const canvas = document.querySelector('#mynetwork canvas');
     if (!canvas) {
         showToast('Canvas not available for export');
         return;
     }
-    
+
     try {
         const imageUri = canvas.toDataURL('image/png');
         const link = document.createElement('a');
@@ -461,6 +597,71 @@ function exportGraphPng() {
     } catch (err) {
         showToast('Export failed (canvas tainted by external images)');
     }
+}
+
+function exportGraphJson() {
+    try {
+        const edges = typeof network !== 'undefined' && network.body && network.body.data
+            ? network.body.data.edges.get()
+            : [];
+        const payload = {
+            exported_at: new Date().toISOString(),
+            node_count: nodeData.length,
+            edge_count: edges.length,
+            nodes: nodeData,
+            edges: edges,
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `cloudflare-topology-${new Date().toISOString().slice(0, 10)}.json`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        showToast('Downloaded topology data as JSON');
+    } catch (err) {
+        showToast('Failed to export JSON');
+    }
+}
+
+function toggleHierarchicalLayout() {
+    if (typeof network === 'undefined') return;
+
+    hierarchicalEnabled = !hierarchicalEnabled;
+    if (hierarchicalEnabled) {
+        network.setOptions({
+            layout: {
+                hierarchical: {
+                    enabled: true,
+                    direction: 'LR',
+                    sortMethod: 'directed',
+                    levelSeparation: 220,
+                    nodeSpacing: 110,
+                    treeSpacing: 160,
+                },
+            },
+            physics: { enabled: false },
+        });
+        physicsEnabled = false;
+    } else {
+        network.setOptions({
+            layout: { hierarchical: { enabled: false } },
+            physics: { enabled: true },
+        });
+        physicsEnabled = true;
+    }
+
+    const layoutHeaderBtn = document.getElementById('layoutHeaderBtn');
+    const toolbarLayoutBtn = document.getElementById('toolbarLayoutBtn');
+    const layoutText = document.getElementById('layoutStatusText');
+    if (layoutHeaderBtn) layoutHeaderBtn.classList.toggle('active', hierarchicalEnabled);
+    if (toolbarLayoutBtn) toolbarLayoutBtn.classList.toggle('active', hierarchicalEnabled);
+    if (layoutText) layoutText.textContent = hierarchicalEnabled ? 'Force View' : 'Hierarchy';
+
+    fitGraphView();
+    showToast(hierarchicalEnabled ? 'Switched to Hierarchical Flow layout' : 'Switched to Force-Directed layout');
 }
 
 function toggleLegend() {
@@ -530,12 +731,18 @@ function initializeKeyboardShortcuts() {
             if (e.key === 'f' || e.key === 'F') {
                 e.preventDefault();
                 fitGraphView();
+            } else if (e.key === 'h' || e.key === 'H') {
+                e.preventDefault();
+                toggleHierarchicalLayout();
             } else if (e.code === 'Space') {
                 e.preventDefault();
                 togglePhysics();
             } else if (e.key === 'e' || e.key === 'E') {
                 e.preventDefault();
                 exportGraphPng();
+            } else if (e.key === 'j' || e.key === 'J') {
+                e.preventDefault();
+                exportGraphJson();
             } else if (e.key === 'l' || e.key === 'L') {
                 e.preventDefault();
                 toggleLegend();

@@ -1,3 +1,4 @@
+# flake8: noqa: E501
 """
 HTML renderer for Cloudflare topology visualization using Pyvis.
 """
@@ -20,10 +21,10 @@ logger = logging.getLogger(__name__)
 
 class TopologyRenderer:
     """Renders network graph as interactive HTML visualization."""
-    
+
     def __init__(self, config: Config):
         self.config = config
-    
+
     def render(
         self,
         graph: NetworkGraphBuilder,
@@ -32,20 +33,20 @@ class TopologyRenderer:
     ) -> str:
         """
         Render the network graph to an interactive HTML file.
-        
+
         Args:
             graph: NetworkGraphBuilder with nodes and edges
             output_path: Output file path (uses config default if not provided)
             node_counts: Dictionary of node type counts for dynamic legend/filters
-        
+
         Returns:
             Path to the generated HTML file
         """
         output_path = output_path or self.config.output_file
         node_counts = node_counts or {}
-        
+
         logger.info(f"Rendering topology to {output_path}...")
-        
+
         # Create Pyvis network
         net = Network(
             height="100dvh",
@@ -56,10 +57,10 @@ class TopologyRenderer:
             select_menu=False,
             filter_menu=False,
         )
-        
+
         # Configure physics
         net.set_options(self._get_physics_options())
-        
+
         # Add nodes
         for node in graph.get_node_list():
             net.add_node(
@@ -71,7 +72,7 @@ class TopologyRenderer:
                 title=node.title,
                 group=node.node_type,
             )
-        
+
         # Add edges
         for edge in graph.get_edge_list():
             net.add_edge(
@@ -84,7 +85,7 @@ class TopologyRenderer:
                 title=edge.title,
                 arrows="to",
             )
-        
+
         # Generate HTML atomically: write to a temp file in the same directory,
         # inject customisations, then os.replace to the final path. Prevents
         # partial/empty files if the process is killed mid-write.
@@ -125,7 +126,7 @@ class TopologyRenderer:
 
         logger.info(f"Rendered topology with {len(graph.nodes)} nodes and {len(graph.edges)} edges")
         return output_path
-    
+
     def _get_physics_options(self) -> str:
         """Get Pyvis physics configuration."""
         options = {
@@ -200,14 +201,14 @@ class TopologyRenderer:
             },
         }
         return json.dumps(options)
-    
+
     def _inject_customizations(self, output_path: str, graph: NetworkGraphBuilder, node_counts: dict) -> None:
         """Inject custom CSS and JavaScript into the generated HTML."""
         from datetime import datetime
-        
+
         with open(output_path, "r", encoding="utf-8") as f:
             html_content = f.read()
-        
+
         # Remove empty h1 tags that pyvis adds
         html_content = html_content.replace('<center>\n<h1></h1>\n</center>', '')
         html_content = html_content.replace('<center>\n          <h1></h1>\n        </center>', '')
@@ -228,7 +229,7 @@ class TopologyRenderer:
             f'<meta charset="utf-8">{meta_head}',
             1,
         )
-        
+
         # Remove Bootstrap (unused — custom CSS handles all styling)
         import re
         html_content = re.sub(
@@ -237,7 +238,7 @@ class TopologyRenderer:
         html_content = re.sub(
             r'<script[^>]*cdn\.jsdelivr\.net/npm/bootstrap[^>]*></script>\s*', '', html_content
         )
-        
+
         # Prepare node metadata for search
         node_data = []
         for node in graph.get_node_list():
@@ -247,16 +248,16 @@ class TopologyRenderer:
                 "type": node.node_type,
                 "properties": node.properties,
             })
-        
+
         # Custom CSS
         custom_css = self._get_custom_css()
-        
+
         # Custom JavaScript
         custom_js = self._get_custom_js(node_data)
-        
+
         # Header HTML with branding and stats
         header_html = self._get_header_html(node_counts, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        
+
         # Search box HTML (only show filter buttons for types that exist)
         search_html = self._get_search_html(node_counts)
 
@@ -271,35 +272,35 @@ class TopologyRenderer:
 
         # Shortcuts modal & toast HTML
         shortcuts_html = self._get_shortcuts_html()
-        
+
         # Inject CSS before </head>
         html_content = html_content.replace(
             "</head>",
             f"<style>{custom_css}</style></head>"
         )
-        
+
         # Inject HTML elements before the network div
         html_content = html_content.replace(
             '<div id="mynetwork"',
             f'{header_html}{search_html}{legend_html}{inspector_html}{toolbar_html}{shortcuts_html}<div id="mynetwork"'
         )
-        
+
         # Inject JavaScript before </body>
         html_content = html_content.replace(
             "</body>",
             f"<script>{custom_js}</script></body>"
         )
-        
+
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
-    
+
     def _get_custom_css(self) -> str:
         """Get custom CSS for the visualization."""
         css_file = Path(__file__).resolve().parent / "assets" / "style.css"
         if css_file.is_file():
             return css_file.read_text(encoding="utf-8")
         return ""
-    
+
     def _get_header_html(self, node_counts: dict, timestamp: str) -> str:
         """Get header HTML with branding and summary line."""
         total_resources = sum(node_counts.values())
@@ -318,7 +319,7 @@ class TopologyRenderer:
                     <div class="header-titles">
                         <div class="header-title-row">
                             <h1 class="header-title">Cloudflare Zero Trust Topology</h1>
-                            <span class="header-badge">v0.2</span>
+                            <span class="header-badge">v0.3</span>
                         </div>
                         <p class="header-subtitle">
                             <span class="live-pulse" aria-hidden="true"></span>
@@ -334,6 +335,11 @@ class TopologyRenderer:
                         <span>Fit View</span>
                         <span class="kbd-hint">F</span>
                     </button>
+                    <button class="header-btn" id="layoutHeaderBtn" onclick="toggleHierarchicalLayout()" title="Switch Force / Hierarchical layout (H)" aria-label="Toggle hierarchical layout">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6M9 6v12h6"/></svg>
+                        <span id="layoutStatusText">Hierarchy</span>
+                        <span class="kbd-hint">H</span>
+                    </button>
                     <button class="header-btn" id="physicsHeaderBtn" onclick="togglePhysics()" title="Pause/Resume layout physics (Space)" aria-label="Toggle layout physics">
                         <svg id="physicsIconPause" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
                         <span id="physicsStatusText">Pause</span>
@@ -347,14 +353,14 @@ class TopologyRenderer:
             </div>
         </header>
         """
-    
+
     def _get_search_html(self, node_counts: dict) -> str:
         """Get search box HTML with dynamic filter buttons."""
         filter_buttons = [
             '<button class="filter-btn active" data-type="all" role="button" aria-pressed="true" onclick="toggleFilter(\'all\')">'
             '<span class="filter-dot" style="background: var(--cf-orange);"></span>All</button>'
         ]
-        
+
         type_labels = [
             ('tunnel', 'Tunnels', NodeColors.TUNNEL),
             ('application', 'Apps', NodeColors.APPLICATION),
@@ -364,8 +370,9 @@ class TopologyRenderer:
             ('virtual_network', 'VNets', NodeColors.VIRTUAL_NETWORK),
             ('route', 'Routes', NodeColors.ROUTE),
             ('device', 'Devices', NodeColors.DEVICE),
+            ('gateway_rule', 'Gateway', NodeColors.GATEWAY_RULE),
         ]
-        
+
         for node_type, label, color in type_labels:
             count = node_counts.get(node_type, 0)
             if count > 0:
@@ -373,9 +380,9 @@ class TopologyRenderer:
                     f'<button class="filter-btn" data-type="{node_type}" role="button" aria-pressed="false" onclick="toggleFilter(\'{node_type}\')">'
                     f'<span class="filter-dot" style="background: {color};"></span>{label} ({count})</button>'
                 )
-        
+
         buttons_html = '\n                '.join(filter_buttons)
-        
+
         return f"""
         <aside class="search-container" id="searchContainer" aria-label="Search and filter nodes">
             <div class="search-container-header">
@@ -387,10 +394,10 @@ class TopologyRenderer:
             </div>
             <div class="search-input-wrapper">
                 <svg class="search-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input 
-                    type="text" 
-                    class="search-input" 
-                    id="searchInput" 
+                <input
+                    type="text"
+                    class="search-input"
+                    id="searchInput"
                     aria-label="Search nodes by name, domain, or type"
                     placeholder="Search name, domain, IP... (/)"
                     onkeyup="performSearch(this.value)"
@@ -400,10 +407,24 @@ class TopologyRenderer:
             <div class="filter-buttons" id="filterButtons">
                 {buttons_html}
             </div>
+            <div class="quick-toggles">
+                <button class="quick-toggle-btn" id="connectedOnlyBtn" type="button" aria-pressed="false" onclick="toggleConnectedOnly()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M8.5 8.5l7 7"/></svg>
+                    Connected Only
+                </button>
+                <button class="quick-toggle-btn" id="healthyOnlyBtn" type="button" aria-pressed="false" onclick="toggleStatusFilter('healthy')">
+                    <span class="filter-dot" style="background: var(--accent-green);"></span>
+                    Healthy
+                </button>
+                <button class="quick-toggle-btn" id="unhealthyOnlyBtn" type="button" aria-pressed="false" onclick="toggleStatusFilter('unhealthy')">
+                    <span class="filter-dot" style="background: var(--accent-red);"></span>
+                    Inactive / Down
+                </button>
+            </div>
             <div class="search-results" id="searchResults"></div>
         </aside>
         """
-    
+
     def _get_legend_html(self, node_counts: dict) -> str:
         """Get legend HTML showing only types that exist with shape indicators."""
         shape_svgs = {
@@ -415,8 +436,9 @@ class TopologyRenderer:
             'virtual_network': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>',
             'route': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><circle cx="12" cy="12" r="8"/></svg>',
             'device': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><polygon points="12,2 22,12 12,22 2,12"/></svg>',
+            'gateway_rule': lambda c: f'<svg class="legend-shape-badge" viewBox="0 0 24 24" fill="{c}"><polygon points="12,3 22,21 2,21"/></svg>',
         }
-        
+
         legend_items = [
             ('tunnel', NodeColors.TUNNEL, "Tunnel"),
             ('application', NodeColors.APPLICATION, "Application"),
@@ -426,24 +448,25 @@ class TopologyRenderer:
             ('virtual_network', NodeColors.VIRTUAL_NETWORK, "Virtual Network"),
             ('route', NodeColors.ROUTE, "Route"),
             ('device', NodeColors.DEVICE, "Device"),
+            ('gateway_rule', NodeColors.GATEWAY_RULE, "Gateway Rule"),
         ]
-        
+
         items_html = ""
         for node_type, color, label in legend_items:
             count = node_counts.get(node_type, 0)
             if count > 0:
                 shape_icon = shape_svgs.get(node_type, shape_svgs['application'])(color)
                 items_html += f"""
-                <div class="legend-item">
+                <div class="legend-item" role="button" tabindex="0" onclick="toggleFilter('{node_type}')" title="Click to filter by {label}">
                     {shape_icon}
                     <span>{label}</span>
                     <span class="legend-item-count">{count}</span>
                 </div>
                 """
-        
+
         if not items_html:
             items_html = '<div class="legend-item" style="color: var(--text-tertiary);">No resources found</div>'
-        
+
         return f"""
         <div class="legend-container" id="legendContainer">
             <div class="legend-header">
@@ -476,6 +499,10 @@ class TopologyRenderer:
                     <div class="inspector-card" id="inspectorOverview">
                         <p style="color: var(--text-secondary); font-size: 0.8125rem;">Click on any node in the topology to inspect configuration, ingress rules, routes, and policies.</p>
                     </div>
+                </div>
+                <div class="inspector-section" id="inspectorConnectionsSection" style="display: none;">
+                    <span class="inspector-section-title" id="inspectorConnectionsTitle">Connected Resources</span>
+                    <div class="inspector-connections" id="inspectorConnections"></div>
                 </div>
                 <div class="inspector-section" id="inspectorPropertiesSection">
                     <span class="inspector-section-title">Properties</span>
@@ -513,11 +540,17 @@ class TopologyRenderer:
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
             </button>
             <div class="toolbar-divider"></div>
+            <button class="toolbar-btn" id="toolbarLayoutBtn" onclick="toggleHierarchicalLayout()" title="Toggle Hierarchical Layout (H)" aria-label="Toggle hierarchical layout">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6M9 6v12h6"/></svg>
+            </button>
             <button class="toolbar-btn" id="toolbarPhysicsBtn" onclick="togglePhysics()" title="Toggle Physics (Space)" aria-label="Pause or resume physics">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
             </button>
             <button class="toolbar-btn" onclick="exportGraphPng()" title="Export PNG Snapshot (E)" aria-label="Export canvas snapshot as PNG">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </button>
+            <button class="toolbar-btn" onclick="exportGraphJson()" title="Download Topology JSON (J)" aria-label="Download topology data as JSON">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
             <div class="toolbar-divider"></div>
             <button class="toolbar-btn" onclick="toggleLegend()" title="Toggle Legend (L)" aria-label="Toggle legend">
@@ -541,8 +574,10 @@ class TopologyRenderer:
                 <div class="shortcuts-grid">
                     <div class="shortcut-row"><span>Focus Search</span><span><kbd>/</kbd> or <kbd>⌘K</kbd></span></div>
                     <div class="shortcut-row"><span>Fit View to Canvas</span><span><kbd>F</kbd></span></div>
+                    <div class="shortcut-row"><span>Toggle Hierarchical Layout</span><span><kbd>H</kbd></span></div>
                     <div class="shortcut-row"><span>Pause / Resume Physics</span><span><kbd>Space</kbd></span></div>
                     <div class="shortcut-row"><span>Export PNG Snapshot</span><span><kbd>E</kbd></span></div>
+                    <div class="shortcut-row"><span>Download Topology JSON</span><span><kbd>J</kbd></span></div>
                     <div class="shortcut-row"><span>Toggle Legend</span><span><kbd>L</kbd></span></div>
                     <div class="shortcut-row"><span>Close Panel / Clear</span><span><kbd>Esc</kbd></span></div>
                     <div class="shortcut-row"><span>Show Shortcuts Help</span><span><kbd>?</kbd></span></div>
@@ -551,7 +586,7 @@ class TopologyRenderer:
         </div>
         <div class="toast-notification" id="toastNotification" role="status" aria-live="polite"></div>
         """
-    
+
     def _get_custom_js(self, node_data: list) -> str:
         """Get custom JavaScript for interactivity."""
         node_data_json = json.dumps(node_data)
@@ -564,6 +599,7 @@ class TopologyRenderer:
             "virtual_network": NodeColors.VIRTUAL_NETWORK,
             "identity_provider": NodeColors.IDENTITY_PROVIDER,
             "route": NodeColors.ROUTE,
+            "gateway_rule": NodeColors.GATEWAY_RULE,
         })
         js_file = Path(__file__).resolve().parent / "assets" / "topology.js"
         if js_file.is_file():

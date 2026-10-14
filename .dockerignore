@@ -1,0 +1,30 @@
+# Git & CI
+.git
+.github
+.gitignore
+
+# Virtual environments & caches
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov
+
+# Local secrets & generated outputs
+.env
+*.html
+_deploy
+output
+.gstack
+.wrangler
+
+# Docs & tests (not needed in runtime container)
+docs
+tests
+PLAN.md
+TODOS.md
+CLAUDE.md

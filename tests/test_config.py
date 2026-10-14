@@ -23,7 +23,7 @@ class TestNodeColors:
             NodeColors.DENY,
             NodeColors.BYPASS,
         ]
-        
+
         for color in colors:
             assert color.startswith("#")
             assert len(color) == 7
@@ -41,7 +41,7 @@ class TestNodeShapes:
             "star", "ellipse", "box", "database", "text", "image",
             "circularImage", "hexagon"
         }
-        
+
         shapes = [
             NodeShapes.TUNNEL,
             NodeShapes.APPLICATION,
@@ -52,7 +52,7 @@ class TestNodeShapes:
             NodeShapes.ROUTE,
             NodeShapes.IDENTITY_PROVIDER,
         ]
-        
+
         for shape in shapes:
             assert shape in valid_shapes
 
@@ -64,9 +64,9 @@ class TestConfig:
         """Test creating Config from environment variables."""
         monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
         monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
-        
+
         config = Config.from_env()
-        
+
         assert config.api_token == "test-token"
         assert config.account_id == "test-account"
         assert config.api_base_url == "https://api.cloudflare.com/client/v4"
@@ -75,7 +75,7 @@ class TestConfig:
         """Test that missing API token with no wrangler config raises error."""
         monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
         monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
-        
+
         with patch("config._read_wrangler_token", return_value=None):
             with pytest.raises(ValueError, match="No Cloudflare credentials found"):
                 Config.from_env()
@@ -84,7 +84,7 @@ class TestConfig:
         """Test that missing account ID doesn't raise - it's auto-discovered later."""
         monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
         monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
-        
+
         config = Config.from_env()
         assert config.api_token == "test-token"
         assert config.account_id == ""
@@ -176,6 +176,14 @@ class TestReadWranglerToken:
         monkeypatch.setattr("config.Path.home", lambda: tmp_path)
         assert _read_wrangler_token() == "my-oauth-token"
 
+    def test_reads_macos_library_preferences_toml(self, tmp_path, monkeypatch):
+        """Test reading wrangler config from macOS ~/Library/Preferences/.wrangler/config/default.toml."""
+        config_dir = tmp_path / "Library" / "Preferences" / ".wrangler" / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "default.toml").write_text('oauth_token = "macos-wrangler-token"\n')
+        monkeypatch.setattr("config.Path.home", lambda: tmp_path)
+        assert _read_wrangler_token() == "macos-wrangler-token"
+
     def test_returns_none_when_no_file(self, tmp_path, monkeypatch):
         """Test returns None when wrangler config doesn't exist."""
         monkeypatch.setattr("config.Path.home", lambda: tmp_path)
@@ -196,3 +204,17 @@ class TestReadWranglerToken:
         (config_dir / "default.toml").write_text("this is not valid toml {{{{")
         monkeypatch.setattr("config.Path.home", lambda: tmp_path)
         assert _read_wrangler_token() is None
+
+    def test_config_from_json_file_and_multi_account(self, tmp_path):
+        """Test Config.from_file with JSON and multi-account resolution."""
+        cfg_file = tmp_path / "topology.json"
+        cfg_file.write_text(
+            '{"api_token": "tok-1", "account_ids": ["acc-a", "acc-b"], '
+            '"physics_enabled": false, "node_size_tunnel": 42}',
+            encoding="utf-8",
+        )
+        cfg = Config.from_file(cfg_file)
+        assert cfg.api_token == "tok-1"
+        assert cfg.resolved_account_ids == ["acc-a", "acc-b"]
+        assert cfg.physics_enabled is False
+        assert cfg.node_size_tunnel == 42

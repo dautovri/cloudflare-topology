@@ -2,7 +2,7 @@
 Data models for Cloudflare Zero Trust resources.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Optional, List, Dict, Any
 
 
@@ -44,15 +44,15 @@ class Tunnel:
     account_tag: Optional[str] = None
     tun_type: Optional[str] = None  # cfd_tunnel, warp_connector
     remote_config: bool = False
-    
+
     @property
     def is_healthy(self) -> bool:
         return self.status == "healthy"
-    
+
     @property
     def connector_count(self) -> int:
         return len(self.connections)
-    
+
     @property
     def hostnames(self) -> List[str]:
         """Extract hostnames from ingress config."""
@@ -70,7 +70,7 @@ class PolicyRule:
     """A rule within an access policy (include/exclude/require)."""
     rule_type: str  # email, email_domain, group, everyone, ip, country, etc.
     value: Any
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PolicyRule":
         """Parse a rule from API response."""
@@ -97,10 +97,10 @@ class AccessPolicy:
     approval_groups: List[Dict[str, Any]] = field(default_factory=list)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
-    
+
     # For app-specific policies
     app_id: Optional[str] = None
-    
+
     # For reusable policies
     app_count: int = 0
 
@@ -114,7 +114,7 @@ class AccessApplication:
     app_type: str  # self_hosted, saas, ssh, vnc, browser_isolation, etc.
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
-    
+
     # Application settings
     session_duration: Optional[str] = None
     allowed_idps: List[str] = field(default_factory=list)
@@ -125,17 +125,17 @@ class AccessApplication:
     logo_url: Optional[str] = None
     skip_interstitial: bool = False
     app_launcher_visible: bool = True
-    
+
     # Policies attached to this app
     policies: List[AccessPolicy] = field(default_factory=list)
-    
+
     # For self-hosted apps
     custom_deny_message: Optional[str] = None
     custom_deny_url: Optional[str] = None
-    
+
     # Additional domains
     self_hosted_domains: List[str] = field(default_factory=list)
-    
+
     @property
     def all_domains(self) -> List[str]:
         """Get all domains including self-hosted domains."""
@@ -154,7 +154,7 @@ class AccessGroup:
     require: List[PolicyRule] = field(default_factory=list)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
-    
+
     @property
     def member_count(self) -> int:
         """Estimate member count from include rules."""
@@ -183,12 +183,12 @@ class Device:
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     last_seen: Optional[str] = None
-    
+
     # User association
     user_id: Optional[str] = None
     user_email: Optional[str] = None
     user_name: Optional[str] = None
-    
+
     # Registration info
     active_registrations: int = 0
     revoked_at: Optional[str] = None
@@ -226,7 +226,7 @@ class IdentityProvider:
     name: str
     idp_type: str  # azureAD, okta, google, github, saml, etc.
     config: Dict[str, Any] = field(default_factory=dict)
-    
+
     # SCIM configuration
     scim_config: Optional[Dict[str, Any]] = None
 
@@ -246,7 +246,7 @@ class GatewayRule:
     updated_at: Optional[str] = None
 
 
-@dataclass 
+@dataclass
 class CloudflareTopology:
     """Container for all Cloudflare Zero Trust topology data."""
     tunnels: List[Tunnel] = field(default_factory=list)
@@ -258,11 +258,11 @@ class CloudflareTopology:
     routes: List[Route] = field(default_factory=list)
     identity_providers: List[IdentityProvider] = field(default_factory=list)
     gateway_rules: List[GatewayRule] = field(default_factory=list)
-    
+
     # Metadata
     account_id: Optional[str] = None
     fetched_at: Optional[str] = None
-    
+
     @property
     def total_resources(self) -> int:
         """Total number of resources."""
@@ -277,31 +277,73 @@ class CloudflareTopology:
             len(self.identity_providers) +
             len(self.gateway_rules)
         )
-    
+
     def get_tunnel_by_id(self, tunnel_id: str) -> Optional[Tunnel]:
         """Find tunnel by ID."""
         for tunnel in self.tunnels:
             if tunnel.id == tunnel_id:
                 return tunnel
         return None
-    
+
     def get_app_by_id(self, app_id: str) -> Optional[AccessApplication]:
         """Find application by ID."""
         for app in self.applications:
             if app.id == app_id:
                 return app
         return None
-    
+
     def get_group_by_id(self, group_id: str) -> Optional[AccessGroup]:
         """Find group by ID."""
         for group in self.groups:
             if group.id == group_id:
                 return group
         return None
-    
+
     def get_vnet_by_id(self, vnet_id: str) -> Optional[VirtualNetwork]:
         """Find virtual network by ID."""
         for vnet in self.virtual_networks:
             if vnet.id == vnet_id:
                 return vnet
         return None
+
+    def merge(self, other: "CloudflareTopology") -> "CloudflareTopology":
+        """Merge another CloudflareTopology into this one, deduplicating by resource ID."""
+        def _extend_unique(target: List[Any], source: List[Any]) -> None:
+            existing_ids = {getattr(item, "id", None) for item in target}
+            for item in source:
+                item_id = getattr(item, "id", None)
+                if item_id not in existing_ids:
+                    target.append(item)
+                    existing_ids.add(item_id)
+
+        _extend_unique(self.tunnels, other.tunnels)
+        _extend_unique(self.applications, other.applications)
+        _extend_unique(self.policies, other.policies)
+        _extend_unique(self.groups, other.groups)
+        _extend_unique(self.devices, other.devices)
+        _extend_unique(self.virtual_networks, other.virtual_networks)
+        _extend_unique(self.routes, other.routes)
+        _extend_unique(self.identity_providers, other.identity_providers)
+        _extend_unique(self.gateway_rules, other.gateway_rules)
+        if other.account_id and self.account_id and other.account_id not in self.account_id.split(","):
+            self.account_id = f"{self.account_id},{other.account_id}"
+        elif other.account_id and not self.account_id:
+            self.account_id = other.account_id
+        return self
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize the topology and all nested resources to a plain dict."""
+        data = asdict(self)
+        data["summary"] = {
+            "total_resources": self.total_resources,
+            "tunnels": len(self.tunnels),
+            "applications": len(self.applications),
+            "policies": len(self.policies),
+            "groups": len(self.groups),
+            "identity_providers": len(self.identity_providers),
+            "virtual_networks": len(self.virtual_networks),
+            "routes": len(self.routes),
+            "devices": len(self.devices),
+            "gateway_rules": len(self.gateway_rules),
+        }
+        return data

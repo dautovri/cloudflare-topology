@@ -3,17 +3,18 @@ Flask server for serving the topology visualization in Docker.
 """
 
 import hmac
-import os
 import logging
+import os
 import re
 import subprocess
 import sys
 import threading
+import uuid
 from typing import Dict, Any
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, send_from_directory, jsonify, request, render_template_string
+from flask import Flask, g, send_from_directory, jsonify, request, render_template_string
 from werkzeug.serving import WSGIRequestHandler
 
 # Setup logging
@@ -100,9 +101,19 @@ def _detect_multi_worker():
     return False, None
 
 
+@app.before_request
+def attach_request_id():
+    """Assign a short correlation ID to every incoming request."""
+    incoming = request.headers.get("X-Request-Id", "").strip()
+    g.request_id = incoming if incoming and len(incoming) <= 64 else uuid.uuid4().hex[:12]
+
+
 @app.after_request
 def add_security_headers(response):
-    """Add security headers to all responses."""
+    """Add security headers and X-Request-Id to all responses."""
+    req_id = getattr(g, "request_id", None)
+    if req_id:
+        response.headers["X-Request-Id"] = req_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Content-Security-Policy"] = (
@@ -122,6 +133,7 @@ class _QuietHandler(WSGIRequestHandler):
         if keyword.lower() != "server":
             super().send_header(keyword, value)
 
+
 # Path to the generated HTML file
 APP_DIR = Path(__file__).parent.parent
 OUTPUT_FILE = "network_topology.html"
@@ -131,6 +143,7 @@ OUTPUT_FILE = "network_topology.html"
 def serve_lib(filename):
     """Serve pyvis helper files (e.g. lib/bindings/utils.js)."""
     return send_from_directory(str(APP_DIR / "lib"), filename)
+
 
 ERROR_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -161,7 +174,7 @@ ERROR_PAGE = """<!DOCTYPE html>
 def generate_topology() -> bool:
     """Generate the topology visualization."""
     logger.info("Generating topology visualization...")
-    
+
     try:
         result = subprocess.run(
             [sys.executable, str(APP_DIR / "main.py"), "--no-browser"],
@@ -170,14 +183,14 @@ def generate_topology() -> bool:
             text=True,
             timeout=300,  # 5 minute timeout
         )
-        
+
         if result.returncode != 0:
             logger.error(f"Topology generation failed: {result.stderr}")
             return False
-        
+
         logger.info("Topology generated successfully")
         return True
-        
+
     except subprocess.TimeoutExpired:
         logger.error("Topology generation timed out")
         return False
@@ -262,7 +275,7 @@ def _start_scheduler():
 def serve_topology():
     """Serve the network topology HTML file."""
     output_path = APP_DIR / OUTPUT_FILE
-    
+
     if not output_path.exists():
         return render_template_string(
             ERROR_PAGE,
@@ -270,7 +283,7 @@ def serve_topology():
             title="Topology Not Ready",
             message="The network topology hasn't been generated yet. Check the logs or trigger a regeneration.",
         ), 503
-    
+
     return send_from_directory(str(APP_DIR), OUTPUT_FILE)
 
 

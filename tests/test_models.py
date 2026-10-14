@@ -234,3 +234,21 @@ class TestCloudflareTopology:
         assert topology.tunnels[0].name == "test-tunnel"
         assert topology.applications[0].domain == "app.example.com"
         assert topology.total_resources == 2
+
+    def test_topology_merge_deduplicates(self):
+        """Test merging two topologies deduplicates by resource ID and combines account_ids."""
+        t1 = CloudflareTopology(
+            account_id="acc-1",
+            tunnels=[Tunnel(id="tun-1", name="t1", status="healthy")],
+        )
+        t2 = CloudflareTopology(
+            account_id="acc-2",
+            tunnels=[
+                Tunnel(id="tun-1", name="t1-dup", status="healthy"),
+                Tunnel(id="tun-2", name="t2", status="healthy"),
+            ],
+        )
+        t1.merge(t2)
+        assert len(t1.tunnels) == 2
+        assert t1.account_id == "acc-1,acc-2"
+        assert t1.to_dict()["summary"]["tunnels"] == 2

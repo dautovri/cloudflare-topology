@@ -4,13 +4,7 @@ FROM python:3.12-alpine
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    python3-dev
-
-# Copy requirements first for better caching
+# Copy requirements first for better layer caching
 COPY requirements.txt .
 
 # Install Python dependencies

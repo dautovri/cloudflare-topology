@@ -224,3 +224,50 @@ class TestEdgeMetadata:
         assert edge.label == "connects"
         assert edge.dashes is True
         assert edge.width == 2
+
+    def test_tooltip_escapes_html_xss(self):
+        """Test that _format_tooltip escapes HTML characters to prevent XSS."""
+        builder = NetworkGraphBuilder()
+        tooltip = builder._format_tooltip(
+            'Tunnel <script>alert(1)</script>',
+            {'Comment': '<img src=x onerror="alert(2)">'},
+        )
+        assert "<script>" not in tooltip
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in tooltip
+        assert "&lt;img src=x onerror=&quot;alert(2)&quot;&gt;" in tooltip
+
+    def test_gateway_rule_nodes_and_edges(self):
+        """Test that Gateway rules build nodes and link to matching applications."""
+        from models.cloudflare_data import AccessApplication, CloudflareTopology, GatewayRule
+
+        topology = CloudflareTopology(
+            applications=[
+                AccessApplication(
+                    id="app-1",
+                    name="Grafana",
+                    domain="grafana.example.com",
+                    app_type="self_hosted",
+                )
+            ],
+            gateway_rules=[
+                GatewayRule(
+                    id="gw-1",
+                    name="Inspect Grafana",
+                    action="allow",
+                    enabled=True,
+                    precedence=1,
+                    filters=["http"],
+                    traffic='http.request.host in {"grafana.example.com"}',
+                )
+            ],
+        )
+        builder = NetworkGraphBuilder().build(topology)
+        assert "gateway_rule:gw-1" in builder.nodes
+        assert builder.nodes["gateway_rule:gw-1"].node_type == "gateway_rule"
+        assert any(
+            e.source == "gateway_rule:gw-1" and e.target == "app:app-1"
+            for e in builder.edges
+        )
+        exported = builder.to_dict()
+        assert exported["node_count"] == 2
+        assert exported["edge_count"] == 1

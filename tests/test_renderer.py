@@ -35,7 +35,7 @@ class TestTopologyRenderer:
         renderer = TopologyRenderer(mock_config)
         node_data = [{"id": "node-1", "label": "Test Node", "type": "tunnel", "properties": {}}]
         js = renderer._get_custom_js(node_data)
-        
+
         assert "__NODE_DATA__" not in js
         assert "__NODE_COLORS__" not in js
         assert "node-1" in js
@@ -59,4 +59,8 @@ class TestTopologyRenderer:
             assert "Cloudflare Zero Trust Topology" in content
             assert "mynetwork" in content
             assert "performSearch" in content
+            assert "escapeHtml" in content
+            assert "toggleHierarchicalLayout" in content
+            assert "exportGraphJson" in content
+            assert "inspectorConnections" in content
             assert ":root" in content

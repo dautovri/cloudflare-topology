@@ -17,15 +17,12 @@ run:
 		echo "Error: CLOUDFLARE_API_TOKEN is not set"; \
 		exit 1; \
 	fi
-	@if [ -z "$$CLOUDFLARE_ACCOUNT_ID" ]; then \
-		echo "Error: CLOUDFLARE_ACCOUNT_ID is not set"; \
-		exit 1; \
-	fi
 	docker run -d \
 		--name $(CONTAINER_NAME) \
 		-p $(PORT):8080 \
 		-e CLOUDFLARE_API_TOKEN="$$CLOUDFLARE_API_TOKEN" \
 		-e CLOUDFLARE_ACCOUNT_ID="$$CLOUDFLARE_ACCOUNT_ID" \
+		-e TOPOLOGY_SOURCE="$${TOPOLOGY_SOURCE:-rest}" \
 		$(IMAGE_NAME)
 	@echo "Container started. Access at http://localhost:$(PORT)"
 
@@ -35,15 +32,12 @@ run-it:
 		echo "Error: CLOUDFLARE_API_TOKEN is not set"; \
 		exit 1; \
 	fi
-	@if [ -z "$$CLOUDFLARE_ACCOUNT_ID" ]; then \
-		echo "Error: CLOUDFLARE_ACCOUNT_ID is not set"; \
-		exit 1; \
-	fi
 	docker run -it --rm \
 		--name $(CONTAINER_NAME) \
 		-p $(PORT):8080 \
 		-e CLOUDFLARE_API_TOKEN="$$CLOUDFLARE_API_TOKEN" \
 		-e CLOUDFLARE_ACCOUNT_ID="$$CLOUDFLARE_ACCOUNT_ID" \
+		-e TOPOLOGY_SOURCE="$${TOPOLOGY_SOURCE:-rest}" \
 		$(IMAGE_NAME)
 
 # Stop the container
@@ -69,7 +63,7 @@ test:
 
 # Run linting
 lint:
-	python -m flake8 . --max-line-length=120 --exclude=venv,__pycache__
+	python -m flake8 . --max-line-length=120 --exclude=venv,.venv,__pycache__,build,dist,.git
 	python -m mypy . --ignore-missing-imports
 
 # View logs

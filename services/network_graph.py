@@ -2,12 +2,13 @@
 Network graph builder for Cloudflare topology visualization.
 """
 
+import html
 import logging
 import re
 from typing import Dict, List, Set, Tuple, Optional, Any
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
-from config import NodeColors, NodeShapes
+from config import Config, NodeColors, NodeShapes
 from models.cloudflare_data import (
     CloudflareTopology,
     Tunnel,
@@ -19,6 +20,7 @@ from models.cloudflare_data import (
     VirtualNetwork,
     Route,
     IdentityProvider,
+    GatewayRule,
 )
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
@@ -44,7 +46,7 @@ class NodeMetadata:
     shape: str
     size: int
     title: str  # HTML tooltip content
-    
+
     # Searchable properties
     properties: Dict[str, Any] = field(default_factory=dict)
 
@@ -63,17 +65,23 @@ class EdgeMetadata:
 
 class NetworkGraphBuilder:
     """Builds a network graph from Cloudflare topology data."""
-    
-    def __init__(self):
+
+    def __init__(self, config: Optional[Config] = None) -> None:
+        self.config = config
         self.nodes: Dict[str, NodeMetadata] = {}
         self.edges: List[EdgeMetadata] = []
         self._edge_set: Set[Tuple[str, str]] = set()  # For deduplication
-    
+
+    def _size(self, attr: str, fallback: int) -> int:
+        if self.config is not None and hasattr(self.config, attr):
+            return int(getattr(self.config, attr))
+        return fallback
+
     def _add_node(self, metadata: NodeMetadata) -> None:
         """Add a node to the graph."""
         if metadata.node_id not in self.nodes:
             self.nodes[metadata.node_id] = metadata
-    
+
     def _add_edge(
         self,
         source: str,
@@ -97,21 +105,25 @@ class NetworkGraphBuilder:
                 width=width,
                 title=title,
             ))
-    
+
     def _format_tooltip(self, title: str, items: Dict[str, Any]) -> str:
-        """Format tooltip HTML content."""
-        lines = [f"<b>{title}</b>"]
+        """Format tooltip HTML content with HTML-escaped values."""
+        lines = [f"<b>{html.escape(str(title), quote=True)}</b>"]
         for key, value in items.items():
             if value is not None and value != "" and value != []:
                 if isinstance(value, list):
-                    value = ", ".join(str(v) for v in value[:5])
+                    raw_val = ", ".join(str(v) for v in value[:5])
                     if len(items.get(key, [])) > 5:
-                        value += "..."
+                        raw_val += "..."
                 elif isinstance(value, bool):
-                    value = "Yes" if value else "No"
-                lines.append(f"<br><b>{key}:</b> {value}")
+                    raw_val = "Yes" if value else "No"
+                else:
+                    raw_val = str(value)
+                safe_key = html.escape(str(key), quote=True)
+                safe_val = html.escape(raw_val, quote=True)
+                lines.append(f"<br><b>{safe_key}:</b> {safe_val}")
         return "".join(lines)
-    
+
     def _get_status_color(self, status: str) -> str:
         """Get color based on status."""
         status_colors = {
@@ -121,7 +133,7 @@ class NetworkGraphBuilder:
             "down": "#ef4444",
         }
         return status_colors.get(status.lower(), "#6b7280")
-    
+
     def _get_decision_color(self, decision: str) -> str:
         """Get color based on policy decision."""
         decision_colors = {
@@ -131,11 +143,11 @@ class NetworkGraphBuilder:
             "non_identity": "#3b82f6",
         }
         return decision_colors.get(decision.lower(), NodeColors.POLICY)
-    
+
     # -------------------------------------------------------------------------
     # Node Building Methods
     # -------------------------------------------------------------------------
-    
+
     def _build_tunnel_nodes(self, tunnels: List[Tunnel]) -> None:
         """Build nodes for tunnels."""
         for tunnel in tunnels:
@@ -147,34 +159,35 @@ class NetworkGraphBuilder:
                 "Remote Config": tunnel.remote_config,
                 "Created": tunnel.created_at[:10] if tunnel.created_at else None,
             }
-            
+
             # Add connector info
             if tunnel.connections:
                 colos = [c.colo_name for c in tunnel.connections if c.colo_name]
                 if colos:
                     tooltip_items["Connected Colos"] = colos
-            
+
             # Add hostnames from config
             if tunnel.hostnames:
                 tooltip_items["Hostnames"] = tunnel.hostnames[:5]
-            
+
             node = NodeMetadata(
                 node_id=f"tunnel:{tunnel.id}",
                 node_type="tunnel",
                 label=tunnel.name,
                 color=self._get_status_color(tunnel.status),
                 shape=NodeShapes.TUNNEL,
-                size=30,
+                size=self._size("node_size_tunnel", 30),
                 title=self._format_tooltip(f"Tunnel: {tunnel.name}", tooltip_items),
                 properties={
                     "name": tunnel.name,
                     "status": tunnel.status,
                     "type": tunnel.tun_type,
                     "hostnames": tunnel.hostnames,
+                    "ingress_rules": tunnel.config.ingress if tunnel.config else [],
                 },
             )
             self._add_node(node)
-    
+
     def _build_application_nodes(self, applications: List[AccessApplication]) -> None:
         """Build nodes for Access applications."""
         for app in applications:
@@ -185,20 +198,20 @@ class NetworkGraphBuilder:
                 "App Launcher": app.app_launcher_visible,
                 "Auto Redirect": app.auto_redirect_to_identity,
             }
-            
+
             if app.self_hosted_domains:
                 tooltip_items["Additional Domains"] = app.self_hosted_domains
-            
+
             if app.policies:
                 tooltip_items["Policies"] = len(app.policies)
-            
+
             node = NodeMetadata(
                 node_id=f"app:{app.id}",
                 node_type="application",
                 label=app.name,
                 color=NodeColors.APPLICATION,
                 shape=NodeShapes.APPLICATION,
-                size=25,
+                size=self._size("node_size_application", 25),
                 title=self._format_tooltip(f"Application: {app.name}", tooltip_items),
                 properties={
                     "name": app.name,
@@ -208,7 +221,7 @@ class NetworkGraphBuilder:
                 },
             )
             self._add_node(node)
-    
+
     def _build_policy_nodes(self, policies: List[AccessPolicy], is_app_policy: bool = False) -> None:
         """Build nodes for Access policies."""
         for policy in policies:
@@ -216,7 +229,7 @@ class NetworkGraphBuilder:
             include_summary = self._summarize_rules(policy.include)
             exclude_summary = self._summarize_rules(policy.exclude)
             require_summary = self._summarize_rules(policy.require)
-            
+
             tooltip_items = {
                 "Decision": policy.decision.upper(),
                 "Precedence": policy.precedence,
@@ -226,17 +239,17 @@ class NetworkGraphBuilder:
                 "Approval Required": policy.approval_required,
                 "Isolation Required": policy.isolation_required,
             }
-            
+
             if not is_app_policy and policy.app_count:
                 tooltip_items["Used by Apps"] = policy.app_count
-            
+
             node = NodeMetadata(
                 node_id=f"policy:{policy.id}",
                 node_type="policy",
                 label=policy.name,
                 color=self._get_decision_color(policy.decision),
                 shape=NodeShapes.POLICY,
-                size=20,
+                size=self._size("node_size_policy", 20),
                 title=self._format_tooltip(f"Policy: {policy.name}", tooltip_items),
                 properties={
                     "name": policy.name,
@@ -247,25 +260,25 @@ class NetworkGraphBuilder:
                 },
             )
             self._add_node(node)
-    
+
     def _build_group_nodes(self, groups: List[AccessGroup]) -> None:
         """Build nodes for Access groups."""
         for group in groups:
             include_summary = self._summarize_rules(group.include)
-            
+
             tooltip_items = {
                 "Include": include_summary or "None",
                 "Require": self._summarize_rules(group.require) or "None",
                 "Exclude": self._summarize_rules(group.exclude) or "None",
             }
-            
+
             node = NodeMetadata(
                 node_id=f"group:{group.id}",
                 node_type="group",
                 label=group.name,
                 color=NodeColors.GROUP,
                 shape=NodeShapes.GROUP,
-                size=20,
+                size=self._size("node_size_group", 20),
                 title=self._format_tooltip(f"Group: {group.name}", tooltip_items),
                 properties={
                     "name": group.name,
@@ -273,7 +286,7 @@ class NetworkGraphBuilder:
                 },
             )
             self._add_node(node)
-    
+
     def _build_identity_provider_nodes(self, providers: List[IdentityProvider]) -> None:
         """Build nodes for identity providers."""
         for idp in providers:
@@ -281,22 +294,27 @@ class NetworkGraphBuilder:
                 "Type": idp.idp_type,
                 "SCIM Enabled": idp.scim_config is not None,
             }
-            
+
+            if idp.name and _UUID_RE.match(idp.name.strip()) and idp.idp_type:
+                idp_label = f"{idp.idp_type.title()} ({_display_label(idp.name)})"
+            else:
+                idp_label = _display_label(idp.name) or (idp.idp_type or "IdP")
+
             node = NodeMetadata(
                 node_id=f"idp:{idp.id}",
                 node_type="identity_provider",
-                label=_display_label(idp.name) or (idp.idp_type or "IdP"),
+                label=idp_label,
                 color=NodeColors.IDENTITY_PROVIDER,
                 shape=NodeShapes.IDENTITY_PROVIDER,
-                size=25,
-                title=self._format_tooltip(f"Identity Provider: {idp.name}", tooltip_items),
+                size=self._size("node_size_default", 25),
+                title=self._format_tooltip(f"Identity Provider: {idp_label}", tooltip_items),
                 properties={
-                    "name": idp.name,
+                    "name": idp_label,
                     "type": idp.idp_type,
                 },
             )
             self._add_node(node)
-    
+
     def _build_device_nodes(self, devices: List[Device]) -> None:
         """Build nodes for WARP devices."""
         for device in devices:
@@ -308,16 +326,16 @@ class NetworkGraphBuilder:
                 "Last Seen": device.last_seen[:10] if device.last_seen else None,
                 "Active Registrations": device.active_registrations,
             }
-            
+
             display_name = device.name or device.model or f"Device {device.id[:8]}"
-            
+
             node = NodeMetadata(
                 node_id=f"device:{device.id}",
                 node_type="device",
                 label=display_name,
                 color=NodeColors.DEVICE,
                 shape=NodeShapes.DEVICE,
-                size=15,
+                size=self._size("node_size_device", 15),
                 title=self._format_tooltip(f"Device: {display_name}", tooltip_items),
                 properties={
                     "name": display_name,
@@ -326,7 +344,7 @@ class NetworkGraphBuilder:
                 },
             )
             self._add_node(node)
-    
+
     def _build_virtual_network_nodes(self, vnets: List[VirtualNetwork]) -> None:
         """Build nodes for virtual networks."""
         for vnet in vnets:
@@ -334,7 +352,7 @@ class NetworkGraphBuilder:
                 "Default": vnet.is_default or vnet.is_default_network,
                 "Comment": vnet.comment,
             }
-            
+
             node = NodeMetadata(
                 node_id=f"vnet:{vnet.id}",
                 node_type="virtual_network",
@@ -349,7 +367,7 @@ class NetworkGraphBuilder:
                 },
             )
             self._add_node(node)
-    
+
     def _build_route_nodes(self, routes: List[Route]) -> None:
         """Build nodes for private network routes."""
         for route in routes:
@@ -358,7 +376,7 @@ class NetworkGraphBuilder:
                 "Tunnel": route.tunnel_name,
                 "Comment": route.comment,
             }
-            
+
             node = NodeMetadata(
                 node_id=f"route:{route.id}",
                 node_type="route",
@@ -373,11 +391,40 @@ class NetworkGraphBuilder:
                 },
             )
             self._add_node(node)
-    
+
+    def _build_gateway_rule_nodes(self, rules: List[GatewayRule]) -> None:
+        """Build nodes for Gateway firewall rules."""
+        for rule in rules:
+            tooltip_items = {
+                "Action": rule.action.upper() if rule.action else "UNKNOWN",
+                "Enabled": rule.enabled,
+                "Precedence": rule.precedence,
+                "Filters": rule.filters,
+                "Traffic": rule.traffic,
+            }
+
+            node = NodeMetadata(
+                node_id=f"gateway_rule:{rule.id}",
+                node_type="gateway_rule",
+                label=rule.name or f"Rule {rule.id[:8]}",
+                color=NodeColors.GATEWAY_RULE,
+                shape=NodeShapes.GATEWAY_RULE,
+                size=self._size("node_size_gateway_rule", 20),
+                title=self._format_tooltip(f"Gateway Rule: {rule.name}", tooltip_items),
+                properties={
+                    "name": rule.name,
+                    "action": rule.action,
+                    "enabled": rule.enabled,
+                    "filters": rule.filters,
+                    "traffic": rule.traffic,
+                },
+            )
+            self._add_node(node)
+
     # -------------------------------------------------------------------------
     # Edge Building Methods
     # -------------------------------------------------------------------------
-    
+
     def _build_tunnel_to_app_edges(
         self,
         tunnels: List[Tunnel],
@@ -390,7 +437,7 @@ class NetworkGraphBuilder:
             for domain in app.all_domains:
                 if domain:
                     domain_to_app[domain.lower()] = app
-        
+
         # Connect tunnels to apps via hostnames
         for tunnel in tunnels:
             for hostname in tunnel.hostnames:
@@ -404,7 +451,7 @@ class NetworkGraphBuilder:
                         color="#6b7280",
                         width=2,
                     )
-    
+
     def _build_app_to_policy_edges(self, applications: List[AccessApplication]) -> None:
         """Build edges from applications to their policies."""
         for app in applications:
@@ -417,7 +464,7 @@ class NetworkGraphBuilder:
                     color=edge_color,
                     width=2,
                 )
-    
+
     def _build_policy_to_group_edges(
         self,
         policies: List[AccessPolicy],
@@ -425,7 +472,7 @@ class NetworkGraphBuilder:
     ) -> None:
         """Build edges from policies to groups they reference."""
         group_ids = {g.id for g in groups}
-        
+
         for policy in policies:
             for rule in policy.include + policy.require:
                 if rule.rule_type == "group":
@@ -434,7 +481,7 @@ class NetworkGraphBuilder:
                         group_id = group_value.get("id", "")
                     else:
                         group_id = str(group_value)
-                    
+
                     if group_id in group_ids:
                         self._add_edge(
                             source=f"policy:{policy.id}",
@@ -443,7 +490,7 @@ class NetworkGraphBuilder:
                             color=NodeColors.GROUP,
                             dashes=True,
                         )
-    
+
     def _build_app_to_idp_edges(
         self,
         applications: List[AccessApplication],
@@ -451,7 +498,7 @@ class NetworkGraphBuilder:
     ) -> None:
         """Build edges from applications to identity providers."""
         idp_ids = {idp.id for idp in providers}
-        
+
         for app in applications:
             for idp_id in app.allowed_idps:
                 if idp_id in idp_ids:
@@ -462,7 +509,7 @@ class NetworkGraphBuilder:
                         color=NodeColors.IDENTITY_PROVIDER,
                         dashes=True,
                     )
-    
+
     def _build_route_to_tunnel_edges(
         self,
         routes: List[Route],
@@ -470,7 +517,7 @@ class NetworkGraphBuilder:
     ) -> None:
         """Build edges from routes to tunnels."""
         tunnel_ids = {t.id for t in tunnels}
-        
+
         for route in routes:
             if route.tunnel_id and route.tunnel_id in tunnel_ids:
                 self._add_edge(
@@ -480,7 +527,7 @@ class NetworkGraphBuilder:
                     color=NodeColors.ROUTE,
                     width=2,
                 )
-    
+
     def _build_route_to_vnet_edges(
         self,
         routes: List[Route],
@@ -488,7 +535,7 @@ class NetworkGraphBuilder:
     ) -> None:
         """Build edges from routes to virtual networks."""
         vnet_ids = {v.id for v in vnets}
-        
+
         for route in routes:
             if route.virtual_network_id and route.virtual_network_id in vnet_ids:
                 self._add_edge(
@@ -498,16 +545,40 @@ class NetworkGraphBuilder:
                     color=NodeColors.VIRTUAL_NETWORK,
                     dashes=True,
                 )
-    
+
+    def _build_gateway_rule_edges(
+        self,
+        rules: List[GatewayRule],
+        applications: List[AccessApplication],
+    ) -> None:
+        """Build edges from Gateway rules to applications whose domains appear in traffic expressions."""
+        if not rules or not applications:
+            return
+        for rule in rules:
+            traffic_lower = (rule.traffic or "").lower()
+            if not traffic_lower:
+                continue
+            for app in applications:
+                for domain in app.all_domains:
+                    if domain and domain.lower() in traffic_lower:
+                        self._add_edge(
+                            source=f"gateway_rule:{rule.id}",
+                            target=f"app:{app.id}",
+                            label=rule.action or "filters",
+                            color=NodeColors.GATEWAY_RULE,
+                            dashes=True,
+                        )
+                        break
+
     # -------------------------------------------------------------------------
     # Helper Methods
     # -------------------------------------------------------------------------
-    
+
     def _summarize_rules(self, rules: List[PolicyRule]) -> str:
         """Create a summary string for policy rules."""
         if not rules:
             return ""
-        
+
         summaries = []
         for rule in rules[:3]:  # Limit to first 3
             if rule.rule_type == "email":
@@ -529,65 +600,76 @@ class NetworkGraphBuilder:
                 summaries.append(f"country:{country}")
             else:
                 summaries.append(rule.rule_type)
-        
+
         result = ", ".join(summaries)
         if len(rules) > 3:
             result += f" (+{len(rules) - 3} more)"
-        
+
         return result
-    
+
     # -------------------------------------------------------------------------
     # Main Build Method
     # -------------------------------------------------------------------------
-    
+
     def build(self, topology: CloudflareTopology) -> "NetworkGraphBuilder":
         """
         Build the complete network graph from topology data.
-        
+
         Args:
             topology: CloudflareTopology containing all resources
-        
+
         Returns:
             self for method chaining
         """
         logger.info("Building network graph...")
-        
+
         # Build nodes
         self._build_tunnel_nodes(topology.tunnels)
         self._build_application_nodes(topology.applications)
-        
+
         # Build policy nodes (both app-specific and reusable)
         for app in topology.applications:
             self._build_policy_nodes(app.policies, is_app_policy=True)
         self._build_policy_nodes(topology.policies, is_app_policy=False)
-        
+
         self._build_group_nodes(topology.groups)
         self._build_identity_provider_nodes(topology.identity_providers)
         self._build_virtual_network_nodes(topology.virtual_networks)
         self._build_route_nodes(topology.routes)
         self._build_device_nodes(topology.devices)
-        
+        self._build_gateway_rule_nodes(topology.gateway_rules)
+
         # Build edges
         self._build_tunnel_to_app_edges(topology.tunnels, topology.applications)
         self._build_app_to_policy_edges(topology.applications)
-        
+
         # Collect all policies for edge building
         all_policies = list(topology.policies)
         for app in topology.applications:
             all_policies.extend(app.policies)
-        
+
         self._build_policy_to_group_edges(all_policies, topology.groups)
         self._build_app_to_idp_edges(topology.applications, topology.identity_providers)
         self._build_route_to_tunnel_edges(topology.routes, topology.tunnels)
         self._build_route_to_vnet_edges(topology.routes, topology.virtual_networks)
-        
+        self._build_gateway_rule_edges(topology.gateway_rules, topology.applications)
+
         logger.info(f"Graph built: {len(self.nodes)} nodes, {len(self.edges)} edges")
         return self
-    
+
     def get_node_list(self) -> List[NodeMetadata]:
         """Get all nodes as a list."""
         return list(self.nodes.values())
-    
+
     def get_edge_list(self) -> List[EdgeMetadata]:
         """Get all edges as a list."""
         return self.edges
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize the graph nodes and edges to a plain dictionary."""
+        return {
+            "node_count": len(self.nodes),
+            "edge_count": len(self.edges),
+            "nodes": [asdict(n) for n in self.nodes.values()],
+            "edges": [asdict(e) for e in self.edges],
+        }

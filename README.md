@@ -44,11 +44,11 @@ Want it on your own Cloudflare account with real data? See **[Deploy your own](#
 | 🛡️ **Gateway Rules** | DNS and HTTP firewall policies (optional) |
 
 ### Interactive Visualization
-- **Search**: Find nodes by name, domain, or type
-- **Filter**: Toggle visibility by resource type  
-- **Zoom & Pan**: Navigate large topologies
-- **Drag**: Rearrange nodes manually
-- **Tooltips**: Hover for detailed configuration info
+- **Search**: Find nodes by name, domain, CIDR, or type (`/` or `⌘K`)
+- **Filter**: Toggle visibility by resource type, connection state (`Connected Only`), or tunnel health (`Healthy` / `Inactive / Down`)
+- **Inspector Drawer**: Click any node to inspect properties, ingress hosts, and jump directly to connected neighbor resources
+- **Force & Hierarchical Layouts**: Toggle between organic Force-Directed layout and Left-to-Right Hierarchical Flow (`H`)
+- **Export**: Download a PNG canvas snapshot (`E`) or structured JSON dataset (`J`) directly from the UI
 - **Dark Theme**: Easy on the eyes, matches Cloudflare dashboard
 
 ---
@@ -121,8 +121,11 @@ python main.py --demo   # synthetic topology, no Cloudflare API calls
 ### 3. Generate Topology
 
 ```bash
-# Basic usage - opens in browser
+# Basic usage - opens in browser (uses direct REST API by default)
 python main.py
+
+# Fetch via Cloudflare's remote MCP server (https://mcp.cloudflare.com/mcp)
+python main.py --source mcp
 
 # Skip tunnel configs for faster generation
 python main.py --no-tunnel-configs
@@ -377,11 +380,21 @@ python main.py [OPTIONS]
 
 Options:
   --debug              Enable verbose debug logging
+  --config, -c FILE    Load configuration from a JSON or TOML file
+  --account-id ID      Cloudflare account ID (repeatable or comma-separated for multi-account)
   --output, -o FILE    Output HTML file (default: network_topology.html)
+  --export-json FILE   Also export topology + graph as structured JSON to FILE
+  --source {rest,mcp,demo}
+                       Data source transport (default: rest; overrides TOPOLOGY_SOURCE)
+  --mcp-url URL        Override Cloudflare MCP server endpoint (default: https://mcp.cloudflare.com/mcp)
+  --demo               Shorthand for --source demo (synthetic data, no API calls)
+  --setup              Interactive first-run setup wizard (writes .env)
   --no-browser         Don't auto-open browser after generation
   --no-devices         Skip fetching WARP devices (faster)
   --no-tunnel-configs  Skip fetching detailed tunnel configurations
   --include-gateway    Include Gateway firewall rules
+  --no-gateway         Skip fetching Gateway firewall rules (default)
+  --no-physics         Disable graph layout physics on initial load
 ```
 
 ### Environment Variables
@@ -389,10 +402,26 @@ Options:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `CLOUDFLARE_API_TOKEN` | ✅* | API token with Zero Trust read permissions |
-| `CLOUDFLARE_ACCOUNT_ID` | ❌ | Auto-discovered from token; set only for multi-account tokens |
+| `CLOUDFLARE_ACCOUNT_ID` | ❌ | Auto-discovered from token; supports comma-separated IDs for multi-account aggregation |
+| `TOPOLOGY_SOURCE` | ❌ | `rest` (default), `mcp`, or `demo` |
+| `CLOUDFLARE_MCP_URL` | ❌ | Streamable HTTP endpoint for `--source mcp` (default: `https://mcp.cloudflare.com/mcp`) |
 | `DEBUG` | ❌ | Set to `true` for debug logging |
 
-> \* Not needed if you use `wrangler login` (Option A above).
+> \* Not needed if you use `wrangler login` or have `~/.cloudflared/cert.pem` present.
+
+---
+
+## 🛠️ Troubleshooting & Performance Guidance
+
+### Large Accounts (50+ Tunnels / 1,000+ WARP Devices)
+- **Skip WARP devices**: Pass `--no-devices` to skip physical device enumeration when you only need infrastructure/application paths.
+- **Skip per-tunnel configs**: Pass `--no-tunnel-configs` for a fast overview without per-tunnel ingress inspection.
+- **Use MCP transport (`--source mcp`)**: In MCP mode, tunnel configuration fetches are automatically batched inside Cloudflare's edge Worker sandbox via `Promise.all` (25 tunnels per call).
+- **UI filtering**: Click **Connected Only** in the Search & Filter panel or press `H` to switch to Hierarchical Flow when inspecting dense graphs.
+
+### Common Errors
+- **`HTTP 403` / `10000: Authentication error` on specific resources**: Your token is missing optional read scopes (e.g., `Devices: Read` or `Access: Apps and Policies: Read`). The mapper logs a warning and continues with the remaining resources.
+- **Expired `wrangler login` token**: Run `npx wrangler login` to refresh your OAuth token, or export `CLOUDFLARE_API_TOKEN`.
 
 ---
 
@@ -410,17 +439,23 @@ cloudflare-topology/
 │   └── cloudflare_data.py  # Data models for all resources
 │
 ├── services/
-│   ├── cloudflare_api.py   # Cloudflare API client with pagination
+│   ├── cloudflare_api.py   # Cloudflare REST API client with pagination
 │   ├── network_graph.py    # Graph builder (nodes & edges)
-│   └── renderer.py         # HTML/CSS/JS visualization
+│   ├── renderer.py         # HTML/CSS/JS visualization
+│   ├── assets/             # Extracted CSS & JS controller
+│   └── sources/            # Pluggable data sources (rest, mcp, demo, shared)
 │
 ├── server/
 │   └── server.py           # Flask server for Docker
 │
 └── tests/
+    ├── test_cloudflare_api.py
     ├── test_config.py
     ├── test_models.py
-    └── test_network_graph.py
+    ├── test_network_graph.py
+    ├── test_renderer.py
+    ├── test_server.py
+    └── test_sources.py
 ```
 
 ---
