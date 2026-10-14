@@ -61,16 +61,21 @@ class TopologyRenderer:
         # Configure physics
         net.set_options(self._get_physics_options())
 
-        # Add nodes
+        # Add nodes (do not pass `group=` without options.groups, as vis.js
+        # otherwise overrides `color` with its default palette).
         for node in graph.get_node_list():
             net.add_node(
                 node.node_id,
                 label=node.label,
-                color=node.color,
+                color={
+                    "background": node.color,
+                    "border": node.color,
+                    "highlight": {"background": node.color, "border": "#f6821f"},
+                    "hover": {"background": node.color, "border": "#f8fafc"},
+                },
                 shape=node.shape,
                 size=node.size,
                 title=node.title,
-                group=node.node_type,
             )
 
         # Add edges

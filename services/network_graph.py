@@ -125,9 +125,9 @@ class NetworkGraphBuilder:
         return "".join(lines)
 
     def _get_status_color(self, status: str) -> str:
-        """Get color based on status."""
+        """Get color based on status (healthy uses Tunnel blue; unhealthy states use status color)."""
         status_colors = {
-            "healthy": "#22c55e",
+            "healthy": NodeColors.TUNNEL,
             "degraded": "#eab308",
             "inactive": "#6b7280",
             "down": "#ef4444",
