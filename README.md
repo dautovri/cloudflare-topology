@@ -7,61 +7,30 @@
   <img src="https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square" alt="License">
 </p>
 
-Generate interactive network topology visualizations and structured JSON exports for your Cloudflare Zero Trust infrastructure — via the **Cloudflare REST API** or **Cloudflare's remote MCP server (`https://mcp.cloudflare.com/mcp`)**. See your tunnels, access applications, policies, groups, identity providers, virtual networks, private routes, WARP devices, and Gateway rules as an interactive graph.
+Interactive network topology visualizer and JSON exporter for **Cloudflare Zero Trust** — powered by the **Cloudflare REST API** or **Cloudflare's remote MCP server (`https://mcp.cloudflare.com/mcp`)**.
 
-**Inspired by** [tailscale-network-topology-mapper](https://github.com/SimplyMinimal/tailscale-network-topology-mapper)
-
----
-
-## 🎮 Try it online
-
-**[→ topology.dautovri.com](https://topology.dautovri.com)** — live demo with synthetic data, no login, no API token.
-
-_Also reachable at [cloudflare-topology.pages.dev](https://cloudflare-topology.pages.dev)._
-
-Want it on your own Cloudflare account with real data? See **[Deploy your own](#-deploy-your-own)** below (~2 minutes).
-
----
-
-## 📸 Screenshot
+**[→ Live Demo (cloudflare-topology.pages.dev)](https://cloudflare-topology.pages.dev)**
 
 <p align="center">
   <img src="docs/images/topology-screenshot.png" alt="Cloudflare Zero Trust Topology Visualization" width="100%">
 </p>
 
----
+## ✨ What It Maps
 
-## ✨ Features
+| Resource | Details |
+|----------|---------|
+| **Tunnels** | Connector status, colos, ingress hostnames, origin services |
+| **Access Applications** | Self-hosted & SaaS apps, domains, session duration |
+| **Access Policies & Groups** | Allow / deny / bypass rules, include / exclude / require criteria |
+| **Virtual Networks & Routes** | Private network segments and CIDR routes per tunnel |
+| **Identity Providers** | Okta, Azure AD, Google Workspace, GitHub, SAML/OIDC |
+| **WARP Devices & Gateway Rules** | Enrolled devices and DNS/HTTP firewall rules |
 
-| Resource | Visualization |
-|----------|---------------|
-| 🔵 **Tunnels** | Cloudflare Tunnels with connector status, ingress rules, origin IPs |
-| 🟢 **Access Applications** | Self-hosted apps, SaaS apps with domains and session duration |
-| 🟡 **Access Policies** | Allow/deny/bypass rules with include/exclude/require logic |
-| 🟠 **Access Groups** | Reusable identity groups with member criteria |
-| 🟣 **Virtual Networks** | Private network segmentation for tunnel routing |
-| 🔴 **WARP Devices** | Enrolled devices with user info and last seen status |
-| 🌐 **Identity Providers** | Okta, Azure AD, Google, GitHub, and other IdPs |
-| 🛡️ **Gateway Rules** | DNS and HTTP firewall policies (optional) |
-
-### Interactive Visualization
-- **Search**: Find nodes by name, domain, CIDR, or type (`/` or `⌘K`)
-- **Filter**: Toggle visibility by resource type, connection state (`Connected Only`), or tunnel health (`Healthy` / `Inactive / Down`)
-- **Inspector Drawer**: Click any node to inspect properties, ingress hosts, and jump directly to connected neighbor resources
-- **Force & Hierarchical Layouts**: Toggle between organic Force-Directed layout and Left-to-Right Hierarchical Flow (`H`)
-- **Export**: Download a PNG canvas snapshot (`E`) or structured JSON dataset (`J`) directly from the UI
-- **Dark Theme**: Easy on the eyes, matches Cloudflare dashboard
+**UI Controls:** Search (`/` or `⌘K`) • Type & Health Filters (`Connected Only`, `Healthy`, `Inactive / Down`) • Node Inspector with Neighbor Navigation • Force & Hierarchical Layouts (`H`) • Export PNG (`E`) & JSON (`J`).
 
 ---
 
 ## 🚀 Quick Start
-
-### Prerequisites
-
-- **Python 3.12+**
-- **Cloudflare account** (any auth method below)
-
-### 1. Clone & Install
 
 ```bash
 git clone https://github.com/dautovri/cloudflare-topology.git
@@ -69,451 +38,91 @@ cd cloudflare-topology
 pip install -r requirements.txt
 ```
 
-### 2. Authenticate
+### 1. Authenticate (pick one)
 
-Pick whichever is easiest — the tool tries them in order:
+- **Zero-config (Wrangler or `cloudflared`):**
+  ```bash
+  wrangler login                # or `cloudflared tunnel login`
+  python main.py                # auto-discovers ~/.wrangler token or ~/.cloudflared/cert.pem
+  ```
+- **API Token (`.env` or environment variable):**
+  ```bash
+  python main.py --setup        # interactive wizard: writes .env
+  # or
+  export CLOUDFLARE_API_TOKEN="your-token"
+  ```
+  Required token permissions ([Create API Token](https://dash.cloudflare.com/profile/api-tokens)): `Account → Zero Trust: Read` and `Account → Access: Apps and Policies: Read`.
 
-**Option A — Zero config (recommended):** If you have [wrangler](https://developers.cloudflare.com/workers/wrangler/) or `cloudflared` installed:
-
-```bash
-wrangler login          # one-time browser OAuth (or `cloudflared tunnel login`)
-python main.py          # auto-discovers ~/.wrangler token or ~/.cloudflared/cert.pem
-python main.py --source mcp   # or fetch via Cloudflare's remote MCP server
-```
-
-**Option B — Guided setup:** Interactive wizard writes a `.env` file for you:
-
-```bash
-python main.py --setup  # opens the token page, prompts for token, saves .env
-python main.py
-```
-
-**Option C — `.env` file:** Copy the template and fill in your token:
+### 2. Generate Topology
 
 ```bash
-cp .env.example .env
-# edit .env, set CLOUDFLARE_API_TOKEN=...
-python main.py
-```
-
-**Option D — Environment variable:**
-
-```bash
-export CLOUDFLARE_API_TOKEN="your-api-token"
-python main.py
-```
-
-**Option E — Try it without an account:**
-
-```bash
-python main.py --demo   # synthetic topology, no Cloudflare API calls
-```
-
-> **Account ID** is auto-discovered from your token. Set `CLOUDFLARE_ACCOUNT_ID` only if your token has access to multiple accounts and you want a specific one.
-
-<details>
-<summary>📍 Where to create an API token</summary>
-
-1. Go to [Cloudflare Dashboard → API Tokens](https://dash.cloudflare.com/profile/api-tokens)
-2. Click "Create Token" → "Create Custom Token"
-3. Add permissions: **Zero Trust: Read**, **Access: Apps and Policies: Read**
-
-</details>
-
-### 3. Generate Topology
-
-```bash
-# Basic usage - opens in browser (uses direct REST API by default)
-python main.py
-
-# Fetch via Cloudflare's remote MCP server (https://mcp.cloudflare.com/mcp)
-python main.py --source mcp
-
-# Skip tunnel configs for faster generation
-python main.py --no-tunnel-configs
-
-# Include Gateway firewall rules
-python main.py --include-gateway
-
-# Debug mode with verbose output
-python main.py --debug
+python main.py                              # Direct REST API (default), opens in browser
+python main.py --source mcp                 # Fetch via https://mcp.cloudflare.com/mcp
+python main.py --demo                       # Synthetic demo data (no API token needed)
+python main.py --include-gateway            # Include Gateway DNS/HTTP firewall rules
+python main.py --export-json topology.json  # Export structured JSON alongside HTML
 ```
 
 ---
 
-## 🌍 Deploy your own
+## ⚙️ CLI & Configuration
 
-Ship a static version of the topology to your own Cloudflare Pages project — free tier, custom domain, HTTPS included.
-
-### One-time setup
-
-```bash
-npm install -g wrangler          # Cloudflare's CLI
-wrangler login                   # browser OAuth
-```
-
-### Deploy (demo data, no token needed)
-
-```bash
-# First time: pick a unique project name on your account
-PAGES_PROJECT=my-cf-topology make deploy-demo
-
-# Subsequent deploys: just
-make deploy-demo
-```
-
-Wrangler prints a `*.pages.dev` URL. Re-run any time you want to refresh.
-
-### Deploy with your real topology
-
-```bash
-export CLOUDFLARE_API_TOKEN=your-token
-PAGES_PROJECT=my-cf-topology make deploy
-```
-
-> ⚠️ **Static output contains your tunnel names, app domains, and policy details.** Do NOT deploy real topology data to a public site. Use a Cloudflare Access policy (see below) to keep it behind auth.
-
-### Custom domain
-
-Once a Pages project is deployed, point a domain at it:
-
-```bash
-# If your DNS is on Cloudflare (same account):
-npx wrangler pages deployment tail   # confirm project
-# Then in the dashboard: Pages → your project → Custom domains → Set up a custom domain
-# Enter e.g. topology.yourdomain.com — Cloudflare creates the CNAME automatically.
-
-# If DNS is elsewhere: add a CNAME record
-# topology.yourdomain.com  CNAME  YOUR-PROJECT.pages.dev
-```
-
-Cloudflare issues the TLS cert automatically (typically under a minute).
-
-### Protect the public URL with Cloudflare Access (recommended for real data)
-
-For a real-topology deploy you want behind auth:
-
-1. Cloudflare Zero Trust dashboard → **Access → Applications → Add an application → Self-hosted**
-2. Application domain: `topology.yourdomain.com`
-3. Add a policy: `Emails: [you@yourdomain.com]` → Action: Allow
-4. Save.
-
-Now only authenticated users can view the deployed topology.
-
----
-
-## 🐳 Docker Deployment
-
-Run as a web service with automatic regeneration:
-
-```bash
-# Build
-make build
-
-# Run (requires API token — wrangler login not available in Docker)
-export CLOUDFLARE_API_TOKEN="your-token"
-make run
-
-# View at http://localhost:8080
-```
-
-Or with docker directly:
-
-```bash
-docker build -t cloudflare-topology .
-
-docker run -d \
-  --name cloudflare-topology \
-  -p 8080:8080 \
-  -e CLOUDFLARE_API_TOKEN="your-token" \
-  cloudflare-topology
-```
-
-### Docker Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | View topology visualization |
-| `/health` | GET | Health + freshness status (JSON) |
-| `/regenerate` | POST | Queue a topology refresh (requires Bearer auth) |
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CLOUDFLARE_API_TOKEN` | *(required)* | API token with Zero Trust read permissions |
-| `CLOUDFLARE_ACCOUNT_ID` | auto-discover | Account ID (supports comma-separated IDs for multi-account aggregation) |
-| `TOPOLOGY_SOURCE` | `rest` | Data transport: `rest` (direct API), `mcp` (`https://mcp.cloudflare.com/mcp`), or `demo` |
-| `CLOUDFLARE_MCP_URL` | `https://mcp.cloudflare.com/mcp` | Streamable HTTP endpoint when `TOPOLOGY_SOURCE=mcp` |
-| `PORT` | `8080` | Port the Flask server binds to |
-| `HOST` | `0.0.0.0` | Interface the Flask server binds to |
-| `REGEN_INTERVAL_SECONDS` | `900` | Scheduled regeneration interval in seconds. `0` disables the scheduler. Valid range: `0` or `>= 60`. Recommended `>= 300`. |
-| `REGEN_AUTH_TOKEN` | *(unset)* | Bearer token required for `POST /regenerate`. When unset, `/regenerate` returns `403`. |
-
-### Scheduled Regeneration
-
-A background scheduler calls `python main.py` every `REGEN_INTERVAL_SECONDS` seconds (default: 15 minutes) and atomically replaces `network_topology.html`. Default behaviour: the container stays fresh with zero operator action.
-
-- **Disable:** set `REGEN_INTERVAL_SECONDS=0`.
-- **Customise:** `docker run -e REGEN_INTERVAL_SECONDS=1800 ...` for 30 minutes.
-- **Startup:** if `network_topology.html` does not exist yet, the server generates it synchronously on boot before accepting requests.
-
-### ⚠️ Single-Process Deployment Only
-
-The scheduler uses in-process state (`threading.Timer` + a lock). **Do not run with multiple workers** (`gunicorn -w 2+`, uwsgi with processes, etc.) — each worker would run its own scheduler and race for the output file.
-
-The server detects common multi-worker env vars (`WEB_CONCURRENCY`, `GUNICORN_WORKERS`, `UWSGI_WORKERS`, `GUNICORN_CMD_ARGS` with `-w N`) and refuses to start the scheduler, logging an ERROR. The HTTP endpoints still work; the topology just won't auto-refresh.
-
-For multi-replica deployments, coordinate regeneration externally (cron, K8s CronJob, CI).
-
-### `/regenerate` Contract
-
-```
-POST /regenerate
-Authorization: Bearer <REGEN_AUTH_TOKEN>
-```
-
-| Status | Meaning | Body |
-|--------|---------|------|
-| `202 Accepted` | Regeneration queued on background thread | `{"status":"accepted","message":"Topology regeneration queued"}` |
-| `409 Conflict` | Another regeneration is already running. Sets `Retry-After: 10`. | `{"status":"already_running","hint":"GET /health returns regen_in_progress and next_scheduled_regen_at"}` |
-| `401` / `403` | Missing or invalid auth | `{"status":"error","message":"..."}` |
-
-Fire-and-forget: the response returns as soon as the job is queued, not when the topology is ready. Poll `/health` to detect completion.
-
-### `/health` Schema
-
-```json
-{
-  "status": "healthy",
-  "topology_exists": true,
-  "last_generated_at": "2026-04-16T14:15:00Z",
-  "regen_in_progress": false,
-  "next_scheduled_regen_at": "2026-04-16T14:30:00Z"
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `status` | string | Always `"healthy"` when the server is up |
-| `topology_exists` | bool | `true` if `network_topology.html` is present on disk |
-| `last_generated_at` | ISO 8601 UTC or `null` | Timestamp of the last successful regeneration (falls back to file mtime at startup) |
-| `regen_in_progress` | bool | `true` while a regeneration is running |
-| `next_scheduled_regen_at` | ISO 8601 UTC or `null` | When the scheduler will fire next. `null` if the scheduler is disabled. |
-
-### Monitoring & Debugging
-
-Check freshness from outside the container:
-
-```bash
-curl -s http://localhost:8080/health | jq '.last_generated_at, .next_scheduled_regen_at'
-```
-
-If `last_generated_at` is older than `2 * REGEN_INTERVAL_SECONDS`, something is wrong — check container logs:
-
-```bash
-docker logs <container> 2>&1 | grep -iE 'scheduler|regenerat'
-```
-
-Scheduler thread is named `topology-scheduler` for legible stack dumps.
-
-### What's New in v0.3
-
-- **Cloudflare MCP Transport (`--source mcp` / `TOPOLOGY_SOURCE=mcp`)**: Fetch your Zero Trust topology through Cloudflare's remote MCP server (`https://mcp.cloudflare.com/mcp`) using sandboxed Code-Mode `execute` programs and batched `Promise.all` tunnel config queries.
-- **Interactive UI Upgrades**: Connected Resources navigation in the Inspector Drawer, Left-to-Right Hierarchical Flow layout (`H`), `Connected Only` & tunnel health quick toggles, and in-browser JSON export (`J`).
-- **JSON Export & Multi-Account Aggregation**: `--export-json FILE`, `--config FILE` (`.json`/`.toml`), and repeatable/comma-separated `--account-id` support.
-- **Local Auth Fallbacks**: Automatic detection of macOS Wrangler config (`~/Library/Preferences/.wrangler/config/default.toml`) and `~/.cloudflared/cert.pem`.
-
-### Upgrade Guide: v0.1 → v0.2
-
-- `POST /regenerate` now returns **`202 Accepted`** (queued, fire-and-forget) instead of `200 OK` after synchronous completion. Clients that only check `2xx` keep working. Clients that hard-check `status == 200` must accept `202`.
-- Response body key changed from `{"status":"success", ...}` to `{"status":"accepted", ...}` on success.
-- New `409 Conflict` response when a regeneration is already running; clients should respect `Retry-After: 10`.
-- `/health` gains three new fields (`last_generated_at`, `regen_in_progress`, `next_scheduled_regen_at`). Existing `status` and `topology_exists` fields are unchanged.
-- Output file writes are now atomic (`tempfile` + `os.replace`). No action required; readers will never observe a truncated file.
-
----
-
-## 🔑 API Token Permissions
-
-Create a token at [Cloudflare Dashboard → API Tokens](https://dash.cloudflare.com/profile/api-tokens):
-
-### Required Permissions
-
-| Permission | Scope | Used For |
-|------------|-------|----------|
-| **Zero Trust: Read** | Account | Tunnels, virtual networks, routes |
-| **Access: Apps and Policies: Read** | Account | Applications, policies, groups |
-
-### Optional Permissions
-
-| Permission | Scope | Used For |
-|------------|-------|----------|
-| **Devices: Read** | Account | WARP device enrollment |
-| **Gateway: Read** | Account | DNS/HTTP firewall rules |
-
-<details>
-<summary>🛡️ Recommended: Use a Custom Token</summary>
-
-Create a token with **only** the permissions you need. Avoid using Global API Keys.
-
-1. Go to [API Tokens](https://dash.cloudflare.com/profile/api-tokens)
-2. Click "Create Token"
-3. Use "Create Custom Token"
-4. Add the permissions listed above
-5. Set appropriate TTL and IP restrictions for security
-
-</details>
-
----
-
-## 🎨 Node Types & Colors
-
-| Type | Color | Shape | Description |
-|------|-------|-------|-------------|
-| **Tunnel** | Blue `#3b82f6` (or status color) | Hexagon | Cloudflare Tunnel connectors |
-| **Application** | Green `#22c55e` | Circle | Access-protected applications |
-| **Policy** | Yellow `#eab308` (or decision color) | Triangle | Access policy rules (`allow`/`deny`/`bypass`) |
-| **Group** | Orange `#f97316` | Circle | Access groups |
-| **Identity Provider** | Cyan `#06b6d4` | Star | Okta, Azure AD, Google, GitHub, etc. |
-| **Virtual Network** | Purple `#a855f7` | Square | Private network segments |
-| **Route** | Teal `#0d9488` | Circle | Private network CIDR routes (deuteranopia-safe) |
-| **Device** | Red `#ef4444` | Diamond | WARP-enrolled devices |
-| **Gateway Rule** | Pink `#ec4899` | Triangle | Gateway DNS/HTTP firewall policies |
-
----
-
-## ⚙️ CLI Options
-
-```
+```text
 python main.py [OPTIONS]
 
-Options:
-  --debug              Enable verbose debug logging
-  --config, -c FILE    Load configuration from a JSON or TOML file
-  --account-id ID      Cloudflare account ID (repeatable or comma-separated for multi-account)
-  --output, -o FILE    Output HTML file (default: network_topology.html)
-  --export-json FILE   Also export topology + graph as structured JSON to FILE
-  --source {rest,mcp,demo}
-                       Data source transport (default: rest; overrides TOPOLOGY_SOURCE)
-  --mcp-url URL        Override Cloudflare MCP server endpoint (default: https://mcp.cloudflare.com/mcp)
-  --demo               Shorthand for --source demo (synthetic data, no API calls)
-  --setup              Interactive first-run setup wizard (writes .env)
-  --no-browser         Don't auto-open browser after generation
-  --no-devices         Skip fetching WARP devices (faster)
-  --no-tunnel-configs  Skip fetching detailed tunnel configurations
-  --include-gateway    Include Gateway firewall rules
-  --no-gateway         Skip fetching Gateway firewall rules (default)
-  --no-physics         Disable graph layout physics on initial load
+  --source {rest,mcp,demo}  Data transport (default: rest; overrides TOPOLOGY_SOURCE)
+  --mcp-url URL             Custom MCP endpoint (default: https://mcp.cloudflare.com/mcp)
+  --output, -o FILE         Output HTML file (default: network_topology.html)
+  --export-json FILE        Export topology + graph data as JSON
+  --config, -c FILE         Load settings from a .json or .toml file
+  --account-id ID           Cloudflare account ID (repeatable or comma-separated)
+  --include-gateway         Include Gateway firewall rules
+  --no-devices              Skip WARP devices (faster on large accounts)
+  --no-tunnel-configs       Skip per-tunnel ingress configs (faster)
+  --no-physics              Disable initial force-layout physics
+  --no-browser              Don't open browser after generation
+  --demo                    Shorthand for --source demo
+  --setup                   Interactive .env setup wizard
+  --debug                   Verbose logging
 ```
 
-### Environment Variables
+| Environment Variable | Default | Description |
+|----------------------|---------|-------------|
+| `CLOUDFLARE_API_TOKEN` | auto-discover* | API token with Zero Trust read permissions |
+| `CLOUDFLARE_ACCOUNT_ID` | auto-discover | Account ID (comma-separated for multi-account) |
+| `TOPOLOGY_SOURCE` | `rest` | `rest`, `mcp`, or `demo` |
+| `CLOUDFLARE_MCP_URL` | `https://mcp.cloudflare.com/mcp` | MCP server URL |
+| `REGEN_INTERVAL_SECONDS` | `900` | Docker background refresh interval (`0` disables) |
+| `REGEN_AUTH_TOKEN` | *(unset)* | Bearer token for `POST /regenerate` in Docker |
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `CLOUDFLARE_API_TOKEN` | ✅* | API token with Zero Trust read permissions |
-| `CLOUDFLARE_ACCOUNT_ID` | ❌ | Auto-discovered from token; supports comma-separated IDs for multi-account aggregation |
-| `TOPOLOGY_SOURCE` | ❌ | `rest` (default), `mcp`, or `demo` |
-| `CLOUDFLARE_MCP_URL` | ❌ | Streamable HTTP endpoint for `--source mcp` (default: `https://mcp.cloudflare.com/mcp`) |
-| `DEBUG` | ❌ | Set to `true` for debug logging |
-
-> \* Not needed if you use `wrangler login` or have `~/.cloudflared/cert.pem` present.
+\* Auto-discovered if `wrangler login` or `~/.cloudflared/cert.pem` is present.
 
 ---
 
-## 🛠️ Troubleshooting & Performance Guidance
+## 🐳 Docker & Self-Hosting
 
-### Large Accounts (50+ Tunnels / 1,000+ WARP Devices)
-- **Skip WARP devices**: Pass `--no-devices` to skip physical device enumeration when you only need infrastructure/application paths.
-- **Skip per-tunnel configs**: Pass `--no-tunnel-configs` for a fast overview without per-tunnel ingress inspection.
-- **Use MCP transport (`--source mcp`)**: In MCP mode, tunnel configuration fetches are automatically batched inside Cloudflare's edge Worker sandbox via `Promise.all` (25 tunnels per call).
-- **UI filtering**: Click **Connected Only** in the Search & Filter panel or press `H` to switch to Hierarchical Flow when inspecting dense graphs.
-
-### Common Errors
-- **`HTTP 403` / `10000: Authentication error` on specific resources**: Your token is missing optional read scopes (e.g., `Devices: Read` or `Access: Apps and Policies: Read`). The mapper logs a warning and continues with the remaining resources.
-- **Expired `wrangler login` token**: Run `npx wrangler login` to refresh your OAuth token, or export `CLOUDFLARE_API_TOKEN`.
-
----
-
-## 📁 Project Structure
-
+```bash
+export CLOUDFLARE_API_TOKEN="your-token"
+make build && make run
+# Serves at http://localhost:8080 (auto-regenerates every 15m)
 ```
-cloudflare-topology/
-├── main.py                 # CLI entry point
-├── config.py               # Configuration, colors, API endpoints
-├── requirements.txt        # Python dependencies
-├── Dockerfile              # Container image
-├── Makefile                # Build/run commands
-│
-├── models/
-│   └── cloudflare_data.py  # Data models for all resources
-│
-├── services/
-│   ├── cloudflare_api.py   # Cloudflare REST API client with pagination
-│   ├── network_graph.py    # Graph builder (nodes & edges)
-│   ├── renderer.py         # HTML/CSS/JS visualization
-│   ├── assets/             # Extracted CSS & JS controller
-│   └── sources/            # Pluggable data sources (rest, mcp, demo, shared)
-│
-├── server/
-│   └── server.py           # Flask server for Docker
-│
-└── tests/
-    ├── test_cloudflare_api.py
-    ├── test_config.py
-    ├── test_models.py
-    ├── test_network_graph.py
-    ├── test_renderer.py
-    ├── test_server.py
-    └── test_sources.py
-```
+
+- **Endpoints:** `GET /` (topology UI), `GET /health` (freshness JSON), `POST /regenerate` (Bearer `REGEN_AUTH_TOKEN`, returns `202 Accepted`).
+- **Cloudflare Pages deploy:**
+  ```bash
+  PAGES_PROJECT=my-cf-topology make deploy-demo   # synthetic demo
+  PAGES_PROJECT=my-cf-topology make deploy        # real data (protect behind Cloudflare Access!)
+  ```
 
 ---
 
 ## 🧪 Development
 
 ```bash
-# Install dev dependencies
-pip install -r requirements.txt
-
-# Run tests
-make test
-# or
-python -m pytest tests/ -v
-
-# Lint
-make lint
+make test   # pytest (119 tests)
+make lint   # flake8 + mypy
 ```
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests
-5. Submit a pull request
-
----
 
 ## 📜 License
 
-Apache 2.0 - see [LICENSE](LICENSE) for details.
-
----
-
-## 🙏 Acknowledgments
-
-- [tailscale-network-topology-mapper](https://github.com/SimplyMinimal/tailscale-network-topology-mapper) - Original inspiration
-- [Pyvis](https://pyvis.readthedocs.io/) - Python network visualization
-- [vis.js](https://visjs.org/) - JavaScript graph library
-- [Cloudflare](https://cloudflare.com) - Zero Trust platform
-
----
-
-<p align="center">
-  Made with ☁️ for the Cloudflare community
-</p>
+Apache 2.0 — see [LICENSE](LICENSE). Inspired by [tailscale-network-topology-mapper](https://github.com/SimplyMinimal/tailscale-network-topology-mapper).
