@@ -2,11 +2,12 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Cloudflare-Zero_Trust-F6821F?style=flat-square&logo=cloudflare" alt="Cloudflare Zero Trust">
+  <img src="https://img.shields.io/badge/MCP-Supported-F6821F?style=flat-square&logo=cloudflare" alt="Cloudflare MCP">
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+">
   <img src="https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square" alt="License">
 </p>
 
-Generate interactive network topology visualizations for your Cloudflare Zero Trust infrastructure. See your tunnels, access applications, policies, identity providers, and private networks as a beautiful, interactive graph.
+Generate interactive network topology visualizations and structured JSON exports for your Cloudflare Zero Trust infrastructure — via the **Cloudflare REST API** or **Cloudflare's remote MCP server (`https://mcp.cloudflare.com/mcp`)**. See your tunnels, access applications, policies, groups, identity providers, virtual networks, private routes, WARP devices, and Gateway rules as an interactive graph.
 
 **Inspired by** [tailscale-network-topology-mapper](https://github.com/SimplyMinimal/tailscale-network-topology-mapper)
 
@@ -72,11 +73,12 @@ pip install -r requirements.txt
 
 Pick whichever is easiest — the tool tries them in order:
 
-**Option A — Zero config (recommended):** If you have [wrangler](https://developers.cloudflare.com/workers/wrangler/) installed:
+**Option A — Zero config (recommended):** If you have [wrangler](https://developers.cloudflare.com/workers/wrangler/) or `cloudflared` installed:
 
 ```bash
-wrangler login          # one-time: opens browser, click Allow
-python main.py          # done — uses wrangler's OAuth token automatically
+wrangler login          # one-time browser OAuth (or `cloudflared tunnel login`)
+python main.py          # auto-discovers ~/.wrangler token or ~/.cloudflared/cert.pem
+python main.py --source mcp   # or fetch via Cloudflare's remote MCP server
 ```
 
 **Option B — Guided setup:** Interactive wizard writes a `.env` file for you:
@@ -240,7 +242,9 @@ docker run -d \
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CLOUDFLARE_API_TOKEN` | *(required)* | API token with Zero Trust read permissions |
-| `CLOUDFLARE_ACCOUNT_ID` | auto-discover | Account ID (required only for multi-account tokens) |
+| `CLOUDFLARE_ACCOUNT_ID` | auto-discover | Account ID (supports comma-separated IDs for multi-account aggregation) |
+| `TOPOLOGY_SOURCE` | `rest` | Data transport: `rest` (direct API), `mcp` (`https://mcp.cloudflare.com/mcp`), or `demo` |
+| `CLOUDFLARE_MCP_URL` | `https://mcp.cloudflare.com/mcp` | Streamable HTTP endpoint when `TOPOLOGY_SOURCE=mcp` |
 | `PORT` | `8080` | Port the Flask server binds to |
 | `HOST` | `0.0.0.0` | Interface the Flask server binds to |
 | `REGEN_INTERVAL_SECONDS` | `900` | Scheduled regeneration interval in seconds. `0` disables the scheduler. Valid range: `0` or `>= 60`. Recommended `>= 300`. |
@@ -313,6 +317,13 @@ docker logs <container> 2>&1 | grep -iE 'scheduler|regenerat'
 
 Scheduler thread is named `topology-scheduler` for legible stack dumps.
 
+### What's New in v0.3
+
+- **Cloudflare MCP Transport (`--source mcp` / `TOPOLOGY_SOURCE=mcp`)**: Fetch your Zero Trust topology through Cloudflare's remote MCP server (`https://mcp.cloudflare.com/mcp`) using sandboxed Code-Mode `execute` programs and batched `Promise.all` tunnel config queries.
+- **Interactive UI Upgrades**: Connected Resources navigation in the Inspector Drawer, Left-to-Right Hierarchical Flow layout (`H`), `Connected Only` & tunnel health quick toggles, and in-browser JSON export (`J`).
+- **JSON Export & Multi-Account Aggregation**: `--export-json FILE`, `--config FILE` (`.json`/`.toml`), and repeatable/comma-separated `--account-id` support.
+- **Local Auth Fallbacks**: Automatic detection of macOS Wrangler config (`~/Library/Preferences/.wrangler/config/default.toml`) and `~/.cloudflared/cert.pem`.
+
 ### Upgrade Guide: v0.1 → v0.2
 
 - `POST /regenerate` now returns **`202 Accepted`** (queued, fire-and-forget) instead of `200 OK` after synchronous completion. Clients that only check `2xx` keep working. Clients that hard-check `status == 200` must accept `202`.
@@ -360,16 +371,15 @@ Create a token with **only** the permissions you need. Avoid using Global API Ke
 
 | Type | Color | Shape | Description |
 |------|-------|-------|-------------|
-| **Cloudflare** | Orange | Star | Central hub node |
-| **Tunnel** | Blue `#3b82f6` | Hexagon | Cloudflare Tunnel connectors |
+| **Tunnel** | Blue `#3b82f6` (or status color) | Hexagon | Cloudflare Tunnel connectors |
 | **Application** | Green `#22c55e` | Circle | Access-protected applications |
-| **Policy** | Yellow `#eab308` | Triangle | Access policy rules |
+| **Policy** | Yellow `#eab308` (or decision color) | Triangle | Access policy rules (`allow`/`deny`/`bypass`) |
 | **Group** | Orange `#f97316` | Circle | Access groups |
-| **Identity Provider** | Cyan `#06b6d4` | Star | Okta, Azure AD, etc. |
+| **Identity Provider** | Cyan `#06b6d4` | Star | Okta, Azure AD, Google, GitHub, etc. |
 | **Virtual Network** | Purple `#a855f7` | Square | Private network segments |
-| **Route** | Lime `#84cc16` | Circle | Private network routes |
+| **Route** | Teal `#0d9488` | Circle | Private network CIDR routes (deuteranopia-safe) |
 | **Device** | Red `#ef4444` | Diamond | WARP-enrolled devices |
-| **Gateway Rule** | Pink `#ec4899` | Triangle | Firewall policies |
+| **Gateway Rule** | Pink `#ec4899` | Triangle | Gateway DNS/HTTP firewall policies |
 
 ---
 

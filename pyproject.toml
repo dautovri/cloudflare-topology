@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cloudflare-topology"
 version = "0.3.0"
-description = "Interactive network topology visualization for Cloudflare Zero Trust"
+description = "Interactive network topology visualizer and JSON exporter for Cloudflare Zero Trust (REST API & Cloudflare MCP)"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "Apache-2.0"}
